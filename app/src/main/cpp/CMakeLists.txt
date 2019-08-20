@@ -3,7 +3,11 @@ cmake_minimum_required(VERSION 3.4.1)
 set(ffmepg_src ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
 message("ffmepg_src:" ${ffmepg_src})
 
-add_library(native-lib SHARED native-lib.cpp)
+add_library(native-lib
+        SHARED
+        native-lib.cpp
+        Opensl.cpp
+        )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)
 set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavcodec.so)
@@ -29,4 +33,5 @@ target_link_libraries(
         avutil
         avfilter
         log
-        android)
+        android
+        OpenSLES)

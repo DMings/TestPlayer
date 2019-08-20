@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <string>
 #include "log.h"
+#include "Opensl.h"
 
 extern "C" {
 #include <libavutil/log.h>
@@ -10,10 +11,10 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/timestamp.h>
 #include <libavutil/samplefmt.h>
+}
 #define FLOGI(FORMAT, ...) LOGI(FORMAT,##__VA_ARGS__);
 #define FLOGE(FORMAT, ...) LOGE(FORMAT,##__VA_ARGS__);
 //#define FLOGI(FORMAT, ...) av_log(NULL, AV_LOG_INFO, FORMAT,##__VA_ARGS__);
-}
 
 void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
 
@@ -109,6 +110,10 @@ static int get_format_from_sample_fmt(const char **fmt,
             {AV_SAMPLE_FMT_FLT, "f32be", "f32le"},
             {AV_SAMPLE_FMT_DBL, "f64be", "f64le"},
     };
+    Opensl *sl = new Opensl(0, 0);
+    sl->createPlayer(44100, 2);
+    sl->release();
+    delete sl;
     *fmt = NULL;
     for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
         struct sample_fmt_entry *entry = &sample_fmt_entries[i];
@@ -199,9 +204,7 @@ static int decode_packet(int *got_frame, int cached) {
 }
 
 void testPlayer(const char *src_filename) {
-
     int ret = 0, got_frame;
-
     video_frame_count = 0;
     audio_frame_count = 0;
 
@@ -259,7 +262,6 @@ void testPlayer(const char *src_filename) {
         FLOGI("Could not allocate frame");
         goto end;
     }
-
 /* initialize packet, set data to NULL, let the demuxer fill it */
     av_init_packet(&pkt);
     pkt.data = NULL;
@@ -268,7 +270,8 @@ void testPlayer(const char *src_filename) {
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         AVPacket orig_pkt = pkt;
         do {
-            ret = decode_packet(&got_frame, 0);
+//            ret = decode_packet(&got_frame, 0);
+            ret = -1;
             if (ret < 0)
                 break;
             pkt.data += ret;
@@ -280,7 +283,7 @@ void testPlayer(const char *src_filename) {
     pkt.data = NULL;
     pkt.size = 0;
     do {
-        decode_packet(&got_frame, 1);
+//        decode_packet(&got_frame, 1);
     } while (got_frame);
     FLOGI("Demuxing succeeded.\n");
 
