@@ -11,8 +11,6 @@
 class Opensl {
 public:
 
-    Opensl(int sampleRate, int channels);
-
     int createPlayer(int sampleRate, int channels);
 
     static void slBufferQueueCallback(SLAndroidSimpleBufferQueueItf bq, void *context);

@@ -17,9 +17,6 @@ void Opensl::slBufferQueueCallback(SLAndroidSimpleBufferQueueItf bq, void *conte
         LOGI("decodeAudio error");
 }
 
-Opensl::Opensl(int sampleRate, int channels){
-
-}
 
 int Opensl::createPlayer(int sampleRate, int channels) {
     SLuint32 sr;

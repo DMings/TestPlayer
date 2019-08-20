@@ -110,10 +110,10 @@ static int get_format_from_sample_fmt(const char **fmt,
             {AV_SAMPLE_FMT_FLT, "f32be", "f32le"},
             {AV_SAMPLE_FMT_DBL, "f64be", "f64le"},
     };
-    Opensl *sl = new Opensl(0, 0);
-    sl->createPlayer(44100, 2);
-    sl->release();
-    delete sl;
+//    Opensl *sl = new Opensl();
+//    sl->createPlayer(44100, 2);
+//    sl->release();
+//    delete sl;
     *fmt = NULL;
     for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
         struct sample_fmt_entry *entry = &sample_fmt_entries[i];
@@ -131,7 +131,7 @@ static int decode_packet(int *got_frame, int cached) {
     int ret = 0;
     int decoded = pkt.size;
     *got_frame = 0;
-    if (pkt.stream_index == video_stream_idx) {
+    if (pkt.stream_index == video_stream_idx && false) {
         /* decode video frame */
 //        avcodec_send_packet(video_dec_ctx,&pkt);
 //        avcodec_receive_frame(video_dec_ctx,frame);
@@ -169,32 +169,42 @@ static int decode_packet(int *got_frame, int cached) {
         /* decode audio frame */
 //        avcodec_send_packet(audio_dec_ctx, &pkt);
 //        avcodec_receive_frame(audio_dec_ctx, frame);
-        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
-        if (ret < 0) {
-            FLOGE("Error decoding audio frame (%s)\n", av_err2str(ret));
-            return ret;
+
+        // 解码
+        ret = avcodec_send_packet(audio_dec_ctx, &pkt);
+        if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
+            LOGE("Player Error : codec step 1 fail");
+        } else {
+            ret = avcodec_receive_frame(audio_dec_ctx, frame);
+            if (ret < 0 && ret != AVERROR_EOF) {
+                LOGE("Player Error : codec step 2 fail");
+            } else {
+//                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
+//                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
+                LOGI("nb_samples: %d channels: %d", frame->nb_samples, frame->channels);
+            }
         }
-        /* Some audio decoders decode only part of the packet, and have to be
-         * called again with the remainder of the packet data.
-         * Sample: fate-suite/lossless-audio/luckynight-partial.shn
-         * Also, some decoders might over-read the packet. */
-        decoded = FFMIN(ret, pkt.size);
-        if (*got_frame) {
-            int unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat) frame->format);
-            FLOGI("audio_frame%s n:%d nb_samples:%d pts:%s\n",
-                  cached ? "(cached)" : "",
-                  audio_frame_count++, frame->nb_samples,
-                  av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));
-            /* Write the raw audio data samples of the first plane. This works
-             * fine for packed formats (e.g. AV_SAMPLE_FMT_S16). However,
-             * most audio decoders output planar audio, which uses a separate
-             * plane of audio samples for each channel (e.g. AV_SAMPLE_FMT_S16P).
-             * In other words, this code will write only the first audio channel
-             * in these cases.
-             * You should use libswresample or libavfilter to convert the frame
-             * to packed data. */
-//            fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
-        }
+
+
+//        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
+//        if (ret < 0) {
+//            FLOGE("Error decoding audio frame (%s)\n", av_err2str(ret));
+//            return ret;
+//        }
+//        /* Some audio decoders decode only part of the packet, and have to be
+//         * called again with the remainder of the packet data.
+//         * Sample: fate-suite/lossless-audio/luckynight-partial.shn
+//         * Also, some decoders might over-read the packet. */
+//        decoded = FFMIN(ret, pkt.size);
+//        if (*got_frame) {
+////            int unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat) frame->format);
+////            FLOGI("audio_frame%s n:%d nb_samples:%d pts:%s\n",
+////                  cached ? "(cached)" : "",
+////                  audio_frame_count++, frame->nb_samples,
+////                  av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));
+//
+////            fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
+//        }
     }
     /* If we use frame reference counting, we own the data and need
      * to de-reference it when we don't use it anymore */
@@ -270,8 +280,7 @@ void testPlayer(const char *src_filename) {
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         AVPacket orig_pkt = pkt;
         do {
-//            ret = decode_packet(&got_frame, 0);
-            ret = -1;
+            ret = decode_packet(&got_frame, 0);
             if (ret < 0)
                 break;
             pkt.data += ret;
@@ -283,7 +292,7 @@ void testPlayer(const char *src_filename) {
     pkt.data = NULL;
     pkt.size = 0;
     do {
-//        decode_packet(&got_frame, 1);
+        decode_packet(&got_frame, 1);
     } while (got_frame);
     FLOGI("Demuxing succeeded.\n");
 
