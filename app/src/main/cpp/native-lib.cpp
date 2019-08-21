@@ -127,65 +127,66 @@ static int get_format_from_sample_fmt(const char **fmt,
     return -1;
 }
 
-static int decode_packet(int *got_frame, int cached) {
+static void decode_packet() {
     int ret = 0;
-    int decoded = pkt.size;
-    *got_frame = 0;
-    if (pkt.stream_index == video_stream_idx && false) {
-        /* decode video frame */
-//        avcodec_send_packet(video_dec_ctx,&pkt);
-//        avcodec_receive_frame(video_dec_ctx,frame);
-        ret = avcodec_decode_video2(video_dec_ctx, frame, got_frame, &pkt);
-        if (ret < 0) {
-            FLOGI("Error decoding video frame (%s)\n", av_err2str(ret));
-            return ret;
-        }
-        if (*got_frame) {
-            if (frame->width != width || frame->height != height ||
-                frame->format != pix_fmt) {
-                /* To handle this change, one could call av_image_alloc again and
-                 * decode the following frames into another rawvideo file. */
-                FLOGE("Error: Width, height and pixel format have to be "
-                      "constant in a rawvideo file, but the width, height or "
-                      "pixel format of the input video changed:\n"
-                      "old: width = %d, height = %d, format = %s\n"
-                      "new: width = %d, height = %d, format = %s\n",
-                      width, height, av_get_pix_fmt_name(pix_fmt),
-                      frame->width, frame->height,
-                      av_get_pix_fmt_name((AVPixelFormat) frame->format));
-                return -1;
-            }
-            FLOGI("video_frame%s n:%d coded_n:%d\n",
-                  cached ? "(cached)" : "",
-                  video_frame_count++, frame->coded_picture_number);
-            /* copy decoded frame to destination buffer:
-             * this is required since rawvideo expects non aligned data */
-//            av_image_copy(video_dst_data, video_dst_linesize,
-//                          (const uint8_t **)(frame->data), frame->linesize,
-//                          pix_fmt, width, height);
-            /* write to rawvideo file */
-        }
-    } else if (pkt.stream_index == audio_stream_idx) {
+//    int decoded = pkt.size;
+//    if (pkt.stream_index == video_stream_idx && false) {
+////        avcodec_send_packet(video_dec_ctx,&pkt);
+////        avcodec_receive_frame(video_dec_ctx,frame);
+//        ret = avcodec_decode_video2(video_dec_ctx, frame, got_frame, &pkt);
+//        if (ret < 0) {
+//            FLOGI("Error decoding video frame (%s)\n", av_err2str(ret));
+//            return ret;
+//        }
+//        if (*got_frame) {
+//            if (frame->width != width || frame->height != height ||
+//                frame->format != pix_fmt) {
+//                /* To handle this change, one could call av_image_alloc again and
+//                 * decode the following frames into another rawvideo file. */
+//                FLOGE("Error: Width, height and pixel format have to be "
+//                      "constant in a rawvideo file, but the width, height or "
+//                      "pixel format of the input video changed:\n"
+//                      "old: width = %d, height = %d, format = %s\n"
+//                      "new: width = %d, height = %d, format = %s\n",
+//                      width, height, av_get_pix_fmt_name(pix_fmt),
+//                      frame->width, frame->height,
+//                      av_get_pix_fmt_name((AVPixelFormat) frame->format));
+//                return -1;
+//            }
+//            FLOGI("video_frame%s n:%d coded_n:%d\n",
+//                  cached ? "(cached)" : "",
+//                  video_frame_count++, frame->coded_picture_number);
+//            /* copy decoded frame to destination buffer:
+//             * this is required since rawvideo expects non aligned data */
+////            av_image_copy(video_dst_data, video_dst_linesize,
+////                          (const uint8_t **)(frame->data), frame->linesize,
+////                          pix_fmt, width, height);
+//            /* write to rawvideo file */
+//        }
+//    } else
+    if (pkt.stream_index == audio_stream_idx) {
         /* decode audio frame */
 //        avcodec_send_packet(audio_dec_ctx, &pkt);
 //        avcodec_receive_frame(audio_dec_ctx, frame);
 
         // 解码
         ret = avcodec_send_packet(audio_dec_ctx, &pkt);
-        if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
-            LOGE("Player Error : codec step 1 fail");
-        } else {
+        if (ret < 0) {
+            LOGE("Error sending a packet for decoding");
+            return;
+        }
+        while (ret >= 0) {
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
-            if (ret < 0 && ret != AVERROR_EOF) {
-                LOGE("Player Error : codec step 2 fail");
-            } else {
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                return;
+            } else if (ret < 0) {
+                LOGE("Error during decoding");
+                return;
+            }
 //                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
 //                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
-                LOGI("nb_samples: %d channels: %d", frame->nb_samples, frame->channels);
-            }
+            LOGI("nb_samples: %d channels: %d", frame->nb_samples, frame->channels);
         }
-
-
 //        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
 //        if (ret < 0) {
 //            FLOGE("Error decoding audio frame (%s)\n", av_err2str(ret));
@@ -208,13 +209,10 @@ static int decode_packet(int *got_frame, int cached) {
     }
     /* If we use frame reference counting, we own the data and need
      * to de-reference it when we don't use it anymore */
-    if (*got_frame)
-        av_frame_unref(frame);
-    return decoded;
 }
 
 void testPlayer(const char *src_filename) {
-    int ret = 0, got_frame;
+    int ret = 0;
     video_frame_count = 0;
     audio_frame_count = 0;
 
@@ -279,22 +277,10 @@ void testPlayer(const char *src_filename) {
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         AVPacket orig_pkt = pkt;
-        do {
-            ret = decode_packet(&got_frame, 0);
-            if (ret < 0)
-                break;
-            pkt.data += ret;
-            pkt.size -= ret;
-        } while (pkt.size > 0);
+        decode_packet();
         av_packet_unref(&orig_pkt);
     }
-    /* flush cached frames */
-    pkt.data = NULL;
-    pkt.size = 0;
-    do {
-        decode_packet(&got_frame, 1);
-    } while (got_frame);
-    FLOGI("Demuxing succeeded.\n");
+    FLOGI("Demuxing succeeded.");
 
     end:
     avcodec_free_context(&video_dec_ctx);
