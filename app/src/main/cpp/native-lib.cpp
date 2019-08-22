@@ -46,7 +46,6 @@ static AVStream *video_stream = NULL, *audio_stream = NULL;
 static AVFrame *frame = NULL;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
-static AVPacket pkt;
 static long video_frame_count;
 static long audio_frame_count;
 
@@ -127,7 +126,7 @@ static int get_format_from_sample_fmt(const char **fmt,
     return -1;
 }
 
-static void decode_packet() {
+static void decode_packet(AVPacket pkt) {
     int ret = 0;
 //    int decoded = pkt.size;
 //    if (pkt.stream_index == video_stream_idx && false) {
@@ -185,7 +184,8 @@ static void decode_packet() {
             }
 //                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
 //                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
-            LOGI("nb_samples: %d channels: %d", frame->nb_samples, frame->channels);
+            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
+                 frame->sample_rate);
         }
 //        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
 //        if (ret < 0) {
@@ -215,6 +215,7 @@ void testPlayer(const char *src_filename) {
     int ret = 0;
     video_frame_count = 0;
     audio_frame_count = 0;
+    AVPacket pkt;
 
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
@@ -277,9 +278,14 @@ void testPlayer(const char *src_filename) {
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         AVPacket orig_pkt = pkt;
-        decode_packet();
+        decode_packet(pkt);
         av_packet_unref(&orig_pkt);
     }
+    /* flush cached frames */
+    pkt.data = NULL;
+    pkt.size = 0;
+    FLOGI("flush cached frames.");
+    decode_packet(pkt);
     FLOGI("Demuxing succeeded.");
 
     end:
