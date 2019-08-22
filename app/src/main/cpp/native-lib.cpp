@@ -16,28 +16,6 @@ extern "C" {
 #define FLOGE(FORMAT, ...) LOGE(FORMAT,##__VA_ARGS__);
 //#define FLOGI(FORMAT, ...) av_log(NULL, AV_LOG_INFO, FORMAT,##__VA_ARGS__);
 
-void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
-
-    static int print_prefix = 1;
-    char line[1024];
-    av_log_format_line2(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
-    if (level <= AV_LOG_DEBUG) {
-        LOGI("%s", line);
-    }
-}
-
-void testPlayer(const char *path);
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_dming_testplayer_MainActivity_testFF(
-        JNIEnv *env,
-        jobject, jstring path_) {
-//    av_log_set_callback(&ffmpegCallback);
-    const char *path = env->GetStringUTFChars(path_, NULL);
-    testPlayer(path);
-    env->ReleaseStringUTFChars(path_, path);
-
-}
 
 static AVFormatContext *fmt_ctx = NULL;
 static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx = NULL;
@@ -46,8 +24,11 @@ static AVStream *video_stream = NULL, *audio_stream = NULL;
 static AVFrame *frame = NULL;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
-static long video_frame_count;
-static long audio_frame_count;
+//Opensl opensl;
+struct SwrContext *swr_context;
+int out_sample_rate;
+int out_channel;
+uint8_t *out_buffer;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
@@ -182,10 +163,14 @@ static void decode_packet(AVPacket pkt) {
                 LOGE("Error during decoding");
                 return;
             }
+            int len = swr_convert(swr_context, &out_buffer, out_sample_rate * out_channel,
+                                  (const uint8_t **) frame->data, frame->nb_samples);
+            LOGI("swr_convert = %d", len);
+            // 播放音频
 //                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
 //                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
-            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
-                 frame->sample_rate);
+//            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
+//                 frame->sample_rate);
         }
 //        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
 //        if (ret < 0) {
@@ -211,11 +196,23 @@ static void decode_packet(AVPacket pkt) {
      * to de-reference it when we don't use it anymore */
 }
 
+
+
+void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
+
+    static int print_prefix = 1;
+    char line[1024];
+    av_log_format_line2(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
+    if (level <= AV_LOG_DEBUG) {
+        LOGI("%s", line);
+    }
+}
+
 void testPlayer(const char *src_filename) {
     int ret = 0;
-    video_frame_count = 0;
-    audio_frame_count = 0;
     AVPacket pkt;
+    enum AVSampleFormat out_format;
+    int out_sample_rate;
 
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
@@ -271,7 +268,25 @@ void testPlayer(const char *src_filename) {
         FLOGI("Could not allocate frame");
         goto end;
     }
-/* initialize packet, set data to NULL, let the demuxer fill it */
+    // 输出的声道布局 (双通道 立体音)
+    out_channel = AV_CH_LAYOUT_STEREO;
+    // 输出采样位数 16位
+    out_format = AV_SAMPLE_FMT_S16;
+    // 输出的采样率必须与输入相同
+    out_sample_rate = audio_dec_ctx->sample_rate;
+    out_buffer = (uint8_t *) av_malloc(out_sample_rate * out_channel);
+    av_samples_alloc(&out_buffer, NULL, 2, out_sample_rate,
+                     AV_SAMPLE_FMT_S16, 0);
+    LOGI("out_sample_rate: %d", out_sample_rate);
+//    opensl.createPlayer(out_sample_rate, out_channel);
+
+    swr_context = swr_alloc();
+    swr_alloc_set_opts(swr_context,
+                       out_channel, out_format, out_sample_rate,
+                       audio_dec_ctx->channel_layout, audio_dec_ctx->sample_fmt, audio_dec_ctx->sample_rate,
+                       0, NULL);
+    swr_init(swr_context);
+    //
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
@@ -287,11 +302,25 @@ void testPlayer(const char *src_filename) {
     FLOGI("flush cached frames.");
     decode_packet(pkt);
     FLOGI("Demuxing succeeded.");
-
+//    opensl.release();
+    av_freep(&out_buffer);
+    swr_free(&swr_context);
     end:
     avcodec_free_context(&video_dec_ctx);
     avcodec_free_context(&audio_dec_ctx);
     avformat_close_input(&fmt_ctx);
     av_frame_free(&frame);
+
+}
+
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_dming_testplayer_MainActivity_testFF(
+        JNIEnv *env,
+        jobject, jstring path_) {
+//    av_log_set_callback(&ffmpegCallback);
+    const char *path = env->GetStringUTFChars(path_, NULL);
+    testPlayer(path);
+    env->ReleaseStringUTFChars(path_, path);
 
 }

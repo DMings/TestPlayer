@@ -47,8 +47,8 @@
  * @{
  */
 #define AV_CH_FRONT_LEFT             0x00000001
-#define AV_CH_FRONT_RIGHT            0x00000002
 #define AV_CH_FRONT_CENTER           0x00000004
+#define AV_CH_FRONT_RIGHT            0x00000002
 #define AV_CH_LOW_FREQUENCY          0x00000008
 #define AV_CH_BACK_LEFT              0x00000010
 #define AV_CH_BACK_RIGHT             0x00000020
