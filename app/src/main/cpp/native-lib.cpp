@@ -26,8 +26,6 @@ static int width, height;
 static enum AVPixelFormat pix_fmt;
 //Opensl opensl;
 struct SwrContext *swr_context;
-int out_sample_rate;
-int out_channel;
 uint8_t *out_buffer;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
@@ -107,8 +105,12 @@ static int get_format_from_sample_fmt(const char **fmt,
     return -1;
 }
 
-static void decode_packet(AVPacket pkt) {
+static void decode_packet(AVPacket *pkt, bool cache) {
     int ret = 0;
+    if (cache) {
+        pkt->data = NULL;
+        pkt->size = 0;
+    }
 //    int decoded = pkt.size;
 //    if (pkt.stream_index == video_stream_idx && false) {
 ////        avcodec_send_packet(video_dec_ctx,&pkt);
@@ -144,13 +146,9 @@ static void decode_packet(AVPacket pkt) {
 //            /* write to rawvideo file */
 //        }
 //    } else
-    if (pkt.stream_index == audio_stream_idx) {
-        /* decode audio frame */
-//        avcodec_send_packet(audio_dec_ctx, &pkt);
-//        avcodec_receive_frame(audio_dec_ctx, frame);
-
+    if (pkt->stream_index == audio_stream_idx) {
         // 解码
-        ret = avcodec_send_packet(audio_dec_ctx, &pkt);
+        ret = avcodec_send_packet(audio_dec_ctx, pkt);
         if (ret < 0) {
             LOGE("Error sending a packet for decoding");
             return;
@@ -163,9 +161,22 @@ static void decode_packet(AVPacket pkt) {
                 LOGE("Error during decoding");
                 return;
             }
-            int len = swr_convert(swr_context, &out_buffer, out_sample_rate * out_channel,
+            int res = -1;
+            if (cache) {
+                int fifo_size = swr_get_out_samples(swr_context, 0);
+                if (fifo_size >= frame->nb_samples) {
+                    res = swr_convert(swr_context, frame->data, frame->nb_samples,
+                                      NULL, 0);
+                }
+            } else {
+                res = swr_convert(swr_context, &out_buffer, frame->nb_samples,
                                   (const uint8_t **) frame->data, frame->nb_samples);
-            LOGI("swr_convert = %d", len);
+            }
+            if (res >= 0) {
+                LOGI("swr_convert = %d", res);
+            } else {
+                LOGI("swr_convert err = %d", res);
+            }
             // 播放音频
 //                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
 //                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
@@ -197,7 +208,6 @@ static void decode_packet(AVPacket pkt) {
 }
 
 
-
 void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
 
     static int print_prefix = 1;
@@ -211,8 +221,8 @@ void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
 void testPlayer(const char *src_filename) {
     int ret = 0;
     AVPacket pkt;
-    enum AVSampleFormat out_format;
-    int out_sample_rate;
+    int out_sample_rate = 0;
+    int n_channels = 0;
 
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
@@ -247,8 +257,9 @@ void testPlayer(const char *src_filename) {
 
     if (audio_stream) {
         enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
-        int n_channels = audio_dec_ctx->channels;
-        const char *fmt;
+        n_channels = audio_dec_ctx->channels;
+        LOGI(">>>n_channels: %d", n_channels);
+//        const char *fmt;
         if (av_sample_fmt_is_planar(sfmt)) {
             const char *packed = av_get_sample_fmt_name(sfmt);
             FLOGI("Warning: the sample format the decoder produced is planar (%s). "
@@ -257,35 +268,41 @@ void testPlayer(const char *src_filename) {
             sfmt = av_get_packed_sample_fmt(sfmt);
             n_channels = 1;
         }
-        if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
-            goto end;
-        FLOGI("ffplay -f %s -ac %d -ar %d byte %d",
-              fmt, n_channels, audio_dec_ctx->sample_rate, av_get_bytes_per_sample(sfmt));
+//        if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
+//            goto end;
+        FLOGI("ffplay -ac %d -ar %d byte %d", n_channels, audio_dec_ctx->sample_rate, av_get_bytes_per_sample(sfmt));
+//        FLOGI("ffplay -f %s -ac %d -ar %d byte %d",
+//              fmt, n_channels, audio_dec_ctx->sample_rate, av_get_bytes_per_sample(sfmt));
     }
-
     frame = av_frame_alloc();
     if (!frame) {
         FLOGI("Could not allocate frame");
         goto end;
     }
-    // 输出的声道布局 (双通道 立体音)
-    out_channel = AV_CH_LAYOUT_STEREO;
-    // 输出采样位数 16位
-    out_format = AV_SAMPLE_FMT_S16;
-    // 输出的采样率必须与输入相同
-    out_sample_rate = audio_dec_ctx->sample_rate;
-    out_buffer = (uint8_t *) av_malloc(out_sample_rate * out_channel);
-    av_samples_alloc(&out_buffer, NULL, 2, out_sample_rate,
-                     AV_SAMPLE_FMT_S16, 0);
-    LOGI("out_sample_rate: %d", out_sample_rate);
+    if (audio_stream) {
+        // 输出的采样率必须与输入相同
+        out_sample_rate = audio_dec_ctx->sample_rate;
+//    out_buffer = (uint8_t *) av_malloc(static_cast<size_t>(out_sample_rate * out_channel * 2));
+        av_samples_alloc(&out_buffer, NULL,
+                         n_channels,
+//                             av_get_channel_layout_nb_channels(audio_dec_ctx->channel_layout),
+                         out_sample_rate,
+                         AV_SAMPLE_FMT_S16, 0);
+        LOGI("out_sample_rate: %d", out_sample_rate);
 //    opensl.createPlayer(out_sample_rate, out_channel);
-
-    swr_context = swr_alloc();
-    swr_alloc_set_opts(swr_context,
-                       out_channel, out_format, out_sample_rate,
-                       audio_dec_ctx->channel_layout, audio_dec_ctx->sample_fmt, audio_dec_ctx->sample_rate,
-                       0, NULL);
-    swr_init(swr_context);
+//    av_get_default_channel_layout(2)
+        swr_context = swr_alloc();
+        swr_alloc_set_opts(swr_context,
+                           AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, out_sample_rate,
+                           audio_dec_ctx->channel_layout, audio_dec_ctx->sample_fmt, audio_dec_ctx->sample_rate,
+                           0, NULL);
+        ret = swr_init(swr_context);
+        if (ret != 0) {
+            LOGE("swr_init failed");
+        } else {
+            LOGI("swr_init success");
+        }
+    }
     //
     av_init_packet(&pkt);
     pkt.data = NULL;
@@ -293,23 +310,25 @@ void testPlayer(const char *src_filename) {
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         AVPacket orig_pkt = pkt;
-        decode_packet(pkt);
+        decode_packet(&pkt, false);
         av_packet_unref(&orig_pkt);
     }
     /* flush cached frames */
-    pkt.data = NULL;
-    pkt.size = 0;
+
     FLOGI("flush cached frames.");
-    decode_packet(pkt);
+    decode_packet(&pkt, true);
     FLOGI("Demuxing succeeded.");
 //    opensl.release();
-    av_freep(&out_buffer);
-    swr_free(&swr_context);
+    if (audio_stream) {
+        delete[](out_buffer);
+        swr_free(&swr_context);
+    }
     end:
     avcodec_free_context(&video_dec_ctx);
     avcodec_free_context(&audio_dec_ctx);
     avformat_close_input(&fmt_ctx);
     av_frame_free(&frame);
+
 
 }
 
