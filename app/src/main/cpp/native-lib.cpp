@@ -323,16 +323,30 @@ static void decode_packet(AVPacket *pkt, bool cache) {
             LOGE("Error sending a packet for decoding");
             return;
         }
-
-        if (queue.size() >= 3) {
+        while ( ret >= 0) {
+            AVFrame *frame = av_frame_alloc();
+            ret = avcodec_receive_frame(audio_dec_ctx, frame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                av_frame_free(&frame);
+                return;
+            } else if (ret < 0) {
+                LOGE("Error during decoding");
+                av_frame_free(&frame);
+                return;
+            }
             pthread_mutex_lock(&f_mutex);
-            pthread_cond_wait(&f_cond, &f_mutex);
+            if (queue.size() > 3) {
+                pthread_cond_wait(&f_cond, &f_mutex);
+                LOGI("pthread wait")
+                queue.push(frame);
+                pthread_cond_signal(&f_cond);
+            } else {
+                queue.push(frame);
+                pthread_cond_signal(&f_cond);
+                LOGI("pthread push")
+            }
             pthread_mutex_unlock(&f_mutex);
         }
-        pthread_mutex_lock(&f_mutex);
-        AVFrame *frame = av_frame_alloc();
-        queue.push(frame);
-        pthread_mutex_unlock(&f_mutex);
 
 //        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
 //        if (ret < 0) {
@@ -367,16 +381,13 @@ void *process(void *args) {
             pthread_cond_signal(&f_cond);
         } else {
             pthread_cond_wait(&f_cond, &f_mutex);
+            if (!queue.empty()) {
+                frame = queue.front();
+                queue.pop();
+            }
         }
         pthread_mutex_unlock(&f_mutex);
-        while (frame != NULL && ret >= 0) {
-            ret = avcodec_receive_frame(audio_dec_ctx, frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                break;
-            } else if (ret < 0) {
-                LOGE("Error during decoding");
-                break;
-            }
+        if (frame != NULL ) {
             VideoState *is = &videoState;
 
 //            set_clock_at(&is->extclk,
@@ -423,23 +434,22 @@ void *process(void *args) {
             double pts = av_q2d(audio_dec_ctx->pkt_timebase) * frame->pts;
             double costTime = (double) 1000000.0 * wanted_nb_samples / frame->sample_rate;
 
-            LOGI("costTime: %f wanted_nb_samples: %d len: %d delay: %d", costTime, wanted_nb_samples, ret, delay);
+            LOGI("costTime: %f wanted_nb_samples: %d len: %d delay: %d pts: %f", costTime, wanted_nb_samples, ret,
+                 delay, pts);
             av_usleep((unsigned int) costTime + 10000);
 
             if (isnan(is->audio_clock)) {
                 is->audio_clock = pts + costTime;
             }
-
             // 播放音频
 //                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
 //                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
 //            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
 //                 frame->sample_rate);
-        }
-        if (frame != NULL) {
             av_frame_free(&frame);
         }
     }
+    return 0;
 }
 
 
@@ -523,11 +533,13 @@ void testPlayer(const char *src_filename) {
         // 输出的采样率必须与输入相同
         out_sample_rate = audio_dec_ctx->sample_rate;
 //    out_buffer = (uint8_t *) av_malloc(static_cast<size_t>(out_sample_rate * out_channel * 2));
-        av_samples_alloc(&out_buffer, NULL,
-                         n_channels,
+        int size = av_samples_alloc(&out_buffer, NULL,
+                                    n_channels,
 //                             av_get_channel_layout_nb_channels(audio_dec_ctx->channel_layout),
-                         out_sample_rate,
-                         AV_SAMPLE_FMT_S16, 0);
+                                    out_sample_rate,
+                                    AV_SAMPLE_FMT_S16, 0);
+        LOGI("av_samples_alloc: %d", size);
+        videoState.audio_diff_threshold = size * 0.5;
         LOGI("out_sample_rate: %d", out_sample_rate);
 //    opensl.createPlayer(out_sample_rate, out_channel);
 //    av_get_default_channel_layout(2)
