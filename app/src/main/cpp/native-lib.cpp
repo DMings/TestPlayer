@@ -2,6 +2,8 @@
 #include <string>
 #include "log.h"
 #include "Opensl.h"
+#include <queue>
+#include <pthread.h>
 
 extern "C" {
 #include <libavutil/log.h>
@@ -51,7 +53,7 @@ typedef struct VideoState {
     double audio_clock = NAN;
 //    int audio_clock_serial;
     double audio_diff_cum; /* used for AV difference average computation */
-    double audio_diff_avg_coef =  exp(log(0.01) / AUDIO_DIFF_AVG_NB);;
+    double audio_diff_avg_coef = exp(log(0.01) / AUDIO_DIFF_AVG_NB);;
     double audio_diff_threshold;
     int audio_diff_avg_count;
     AVStream *audio_st;
@@ -66,7 +68,7 @@ static AVFormatContext *fmt_ctx = NULL;
 static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx = NULL;
 static int video_stream_idx = -1, audio_stream_idx = -1;
 static AVStream *video_stream = NULL, *audio_stream = NULL;
-static AVFrame *frame = NULL;
+//static AVFrame* frame = NULL;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
 //Opensl opensl;
@@ -75,6 +77,11 @@ static uint8_t *out_buffer;
 static VideoState videoState;
 static int wanted_nb_samples;
 static int64_t audio_callback_time;
+static pthread_mutex_t f_mutex;
+static pthread_cond_t f_cond;
+static std::queue<AVFrame *> queue;
+static pthread_t p_tid;
+static bool thread_flag = true;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
@@ -316,75 +323,17 @@ static void decode_packet(AVPacket *pkt, bool cache) {
             LOGE("Error sending a packet for decoding");
             return;
         }
-        while (ret >= 0) {
-            ret = avcodec_receive_frame(audio_dec_ctx, frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                return;
-            } else if (ret < 0) {
-                LOGE("Error during decoding");
-                return;
-            }
-            int res = -1;
 
-            VideoState *is = &videoState;
-
-            wanted_nb_samples = synchronize_audio(is, frame->nb_samples);
-
-//            int out_count = (int64_t) wanted_nb_samples * is->freq / frame->sample_rate + 256;
-//            int out_size = av_samples_get_buffer_size(NULL, is->channels, out_count, is->fmt, 0);
-
-            if (wanted_nb_samples != frame->nb_samples) {
-                if (swr_set_compensation(swr_context,
-                                         (wanted_nb_samples - frame->nb_samples) * is->freq / frame->sample_rate,
-                                         wanted_nb_samples * is->freq / frame->sample_rate) < 0) {
-                    LOGE("swr_set_compensation() failed");
-                    return;
-                }
-            }
-//            len2 = swr_convert(swr_context, out, out_count, frame->data, frame->nb_samples);
-            if (cache) {
-                int fifo_size = swr_get_out_samples(swr_context, 0);
-                if (fifo_size >= frame->nb_samples) {
-                    res = swr_convert(swr_context, frame->data, wanted_nb_samples, NULL, 0);
-                }
-            } else {
-                res = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
-                                  (const uint8_t **) frame->data, frame->nb_samples);
-            }
-            if (res >= 0) {
-//                LOGI("swr_convert = %d", res);
-            } else {
-                LOGI("swr_convert err = %d", res);
-            }
-
-            audio_callback_time = av_gettime_relative();
-
-            double costTime = (double) 1000000.0 * wanted_nb_samples / frame->sample_rate;
-
-            LOGI("costTime: %f wanted_nb_samples: %d led: %d", costTime, wanted_nb_samples,res);
-            av_usleep((unsigned int) costTime + 10000);
-
-            if (isnan(is->audio_clock)) {
-                is->audio_clock = costTime;
-            }
-
-            if (!isnan(is->audio_clock)) {
-                set_clock_at(&is->audclk,
-                             is->audio_clock + costTime,
-                             audio_callback_time / 1000000.0);
-                sync_clock_to_slave(&is->extclk, &is->audclk);
-            }
-//            av_gettime_relative();
-//            if (!isnan(is->audio_clock)) {
-//                set_clock_at(&is->audclk, is->audio_clock - (double)(2 * is->audio_hw_buf_size + is->audio_write_buf_size) / is->audio_tgt.bytes_per_sec, is->audio_clock_serial, audio_callback_time / 1000000.0);
-//                sync_clock_to_slave(&is->extclk, &is->audclk);
-//            }
-            // 播放音频
-//                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
-//                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
-//            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
-//                 frame->sample_rate);
+        if (queue.size() >= 3) {
+            pthread_mutex_lock(&f_mutex);
+            pthread_cond_wait(&f_cond, &f_mutex);
+            pthread_mutex_unlock(&f_mutex);
         }
+        pthread_mutex_lock(&f_mutex);
+        AVFrame *frame = av_frame_alloc();
+        queue.push(frame);
+        pthread_mutex_unlock(&f_mutex);
+
 //        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
 //        if (ret < 0) {
 //            FLOGE("Error decoding audio frame (%s)\n", av_err2str(ret));
@@ -404,6 +353,92 @@ static void decode_packet(AVPacket *pkt, bool cache) {
 //
 ////            fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
 //        }
+    }
+}
+
+void *process(void *args) {
+    int ret = 0;
+    while (thread_flag) {
+        pthread_mutex_lock(&f_mutex);
+        AVFrame *frame = NULL;
+        if (!queue.empty()) {
+            frame = queue.front();
+            queue.pop();
+            pthread_cond_signal(&f_cond);
+        } else {
+            pthread_cond_wait(&f_cond, &f_mutex);
+        }
+        pthread_mutex_unlock(&f_mutex);
+        while (frame != NULL && ret >= 0) {
+            ret = avcodec_receive_frame(audio_dec_ctx, frame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                break;
+            } else if (ret < 0) {
+                LOGE("Error during decoding");
+                break;
+            }
+            VideoState *is = &videoState;
+
+//            set_clock_at(&is->extclk,
+//                         is->audio_clock + costTime,
+//                         audio_callback_time / 1000000.0);
+
+            wanted_nb_samples = synchronize_audio(is, frame->nb_samples);
+
+//            int out_count = (int64_t) wanted_nb_samples * is->freq / frame->sample_rate + 256;
+//            int out_size = av_samples_get_buffer_size(NULL, is->channels, out_count, is->fmt, 0);
+            int delay = 0;
+            if (wanted_nb_samples != frame->nb_samples) {
+                ret = swr_set_compensation(swr_context,
+                                           (wanted_nb_samples - frame->nb_samples) * is->freq / frame->sample_rate,
+                                           wanted_nb_samples * is->freq / frame->sample_rate);
+                if (delay < 0) {
+                    LOGE("swr_set_compensation() failed");
+                    break;
+                } else {
+                    delay = ret;
+                }
+            }
+            ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
+                              (const uint8_t **) frame->data, frame->nb_samples);
+//            len2 = swr_convert(swr_context, out, out_count, frame->data, frame->nb_samples);
+//            if (cache) {
+//                int fifo_size = swr_get_out_samples(swr_context, 0);
+//                if (fifo_size >= frame->nb_samples) {
+//                    res = swr_convert(swr_context, frame->data, wanted_nb_samples, NULL, 0);
+//                }
+//            } else {
+//                res = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
+//                                  (const uint8_t **) frame->data, frame->nb_samples);
+//            }
+            if (ret >= 0) {
+//                LOGI("swr_convert = %d", res);
+            } else {
+                LOGI("swr_convert err = %d", ret);
+            }
+
+            audio_callback_time = av_gettime_relative();
+            AVRational tb = (AVRational) {1, frame->sample_rate};
+//            av_rescale_q(frame->pts, audio_dec_ctx->pkt_timebase, tb);
+            double pts = av_q2d(audio_dec_ctx->pkt_timebase) * frame->pts;
+            double costTime = (double) 1000000.0 * wanted_nb_samples / frame->sample_rate;
+
+            LOGI("costTime: %f wanted_nb_samples: %d len: %d delay: %d", costTime, wanted_nb_samples, ret, delay);
+            av_usleep((unsigned int) costTime + 10000);
+
+            if (isnan(is->audio_clock)) {
+                is->audio_clock = pts + costTime;
+            }
+
+            // 播放音频
+//                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
+//                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
+//            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
+//                 frame->sample_rate);
+        }
+        if (frame != NULL) {
+            av_frame_free(&frame);
+        }
     }
 }
 
@@ -478,11 +513,12 @@ void testPlayer(const char *src_filename) {
 //        FLOGI("ffplay -f %s -ac %d -ar %d byte %d",
 //              fmt, n_channels, audio_dec_ctx->sample_rate, av_get_bytes_per_sample(sfmt));
     }
-    frame = av_frame_alloc();
-    if (!frame) {
-        FLOGI("Could not allocate frame");
-        goto end;
-    }
+
+    pthread_mutex_init(&f_mutex, NULL);
+    pthread_cond_init(&f_cond, NULL);
+
+    pthread_create(&p_tid, 0, process, 0);
+
     if (audio_stream) {
         // 输出的采样率必须与输入相同
         out_sample_rate = audio_dec_ctx->sample_rate;
@@ -536,9 +572,11 @@ void testPlayer(const char *src_filename) {
     avcodec_free_context(&video_dec_ctx);
     avcodec_free_context(&audio_dec_ctx);
     avformat_close_input(&fmt_ctx);
-    av_frame_free(&frame);
 
-
+    pthread_cond_destroy(&f_cond);
+    pthread_mutex_destroy(&f_mutex);
+    thread_flag = false;
+    pthread_join(p_tid, 0);
 }
 
 
