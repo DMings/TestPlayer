@@ -388,6 +388,7 @@ static void **slBufferCallback() {
     if (frame == NULL) {
         bufferSize = 0;
         result[0] = &bufferSize;
+        LOGE("frame null !!!");
         return result;
     }
 
@@ -430,11 +431,10 @@ static void **slBufferCallback() {
 //                                  (const uint8_t **) frame->data, frame->nb_samples);
 //            }
     if (ret >= 0) {
-        LOGI("swr_convert = %d", ret);
+        LOGI("swr_convert = %d wanted_nb_samples: %d", ret,wanted_nb_samples);
     } else {
         LOGI("swr_convert err = %d", ret);
     }
-
 //    audio_callback_time = av_gettime_relative();
 ////            AVRational tb = (AVRational) {1, frame->sample_rate};
 ////            av_rescale_q(frame->pts, audio_dec_ctx->pkt_timebase, tb);
@@ -455,15 +455,15 @@ static void **slBufferCallback() {
 //            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
 //                 frame->sample_rate);
     av_frame_free(&frame);
-    bufferSize = (uint32_t) ret;
+    bufferSize = (uint32_t) ret * 4;
     result[0] = &bufferSize;
-    result[1] = &out_buffer;
+    result[1] = out_buffer;
     return result;
 }
 
 void *process(void *arg) {
     opensl.play();
-    while (thread_flag) {
+    while (thread_flag){
 
     }
     opensl.pause();
@@ -550,12 +550,12 @@ void testPlayer(const char *src_filename) {
         // 输出的采样率必须与输入相同
         out_sample_rate = audio_dec_ctx->sample_rate;
 //    out_buffer = (uint8_t *) av_malloc(static_cast<size_t>(out_sample_rate * out_channel * 2));
-        av_samples_alloc(&out_buffer, NULL,
+        int s = av_samples_alloc(&out_buffer, NULL,
                          av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                          out_sample_rate,
                          AV_SAMPLE_FMT_S16, 0);
         videoState.audio_diff_threshold = out_sample_rate * 0.3;
-        LOGI("out_sample_rate: %d", out_sample_rate);
+        LOGI("out_sample_rate: %d s: %d", out_sample_rate,s);
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
         slConfigure.slBufferCallback = slBufferCallback;

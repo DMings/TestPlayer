@@ -2,24 +2,27 @@
 // Created by Administrator on 2019/8/20.
 //
 
+#include <unistd.h>
+#include <pthread.h>
 #include "Opensl.h"
 
 
 //第一次主动调用在调用线程
 //之后在新线程中回调
 static void slBufferQueueCallback1(SLAndroidSimpleBufferQueueItf bq, void *context) {
-//    LOGI("call %d====%d %d", pthread_self(), gettid(),audio);
+//    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
     Opensl *opensl = (Opensl *) context;
     void **buffer = opensl->slConfigure->slBufferCallback();
+
     SLuint32 size = *((uint32_t *) buffer[0]);
     uint8_t *buf = (uint8_t *) buffer[1];
     if (size != 0) {
         SLresult result = (*bq)->Enqueue(bq, buf, size);
-        LOGI("  bqPlayerCallback :%d size:%d", result,size);
+//        LOGI("  bqPlayerCallback :%d size:%d buf[0]: %x buf[1]: %x", result,size,buf[0],buf[1]);
     } else {
         uint8_t b[] = {0};
         SLresult result = (*bq)->Enqueue(bq, b, 1);
-        LOGE("  decodeAudio error bqPlayerCallback :%d", result);
+//        LOGE("  decodeAudio error bqPlayerCallback :%d", result);
     }
 }
 
@@ -149,9 +152,8 @@ int Opensl::createPlayer(SLConfigure *sLConfigure) {
 }
 
 void Opensl::play() {
-    LOGI("play>>>>>>---->>>>>>>>>>>>>>>");
+    LOGI("Opensl play>>>>>");
     if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
-        LOGI("play>>>>>>++++>>>>>>>>>>>>>>>");
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
         slBufferQueueCallback1(bqPlayerBufferQueue, this);
@@ -159,6 +161,7 @@ void Opensl::play() {
 }
 
 void Opensl::pause() {
+    LOGI("Opensl pause>>>>>");
     if (bqPlayerPlay != NULL) {
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PAUSED);
     }
