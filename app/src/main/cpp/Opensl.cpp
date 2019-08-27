@@ -4,23 +4,30 @@
 
 #include "Opensl.h"
 
+
 //第一次主动调用在调用线程
 //之后在新线程中回调
-void Opensl::slBufferQueueCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
+static void slBufferQueueCallback1(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("call %d====%d %d", pthread_self(), gettid(),audio);
-    SLuint32 size;
+    Opensl *opensl = (Opensl *) context;
 //    LOGI("decode %d", size);
-    if (size > 0) {
-//        SLresult result = (*bq)->Enqueue(bq, audio->buff, size);
-//        LOGI("  bqPlayerCallback :%d", result);
-    } else
-        LOGI("decodeAudio error");
+    void **buffer = opensl->slConfigure->slBufferCallback();
+    SLuint32 size = *((uint32_t *) buffer[0]);
+    uint8_t *buf = (uint8_t *) buffer[1];
+    if (size != 0) {
+        SLresult result = (*bq)->Enqueue(bq, buf, size);
+        LOGI("  bqPlayerCallback :%d", result);
+    } else {
+        uint8_t b[] = {0};
+        SLresult result = (*bq)->Enqueue(bq, b, 1);
+        LOGE("  decodeAudio error bqPlayerCallback :%d", result);
+    }
 }
 
-
-int Opensl::createPlayer(int sampleRate, int channels) {
+int Opensl::createPlayer(SLConfigure *sLConfigure) {
     SLuint32 sr;
-    switch (sampleRate) {
+    this->slConfigure = sLConfigure;
+    switch (sLConfigure->sampleRate) {
         case 8000:
             sr = SL_SAMPLINGRATE_8;
             break;
@@ -62,10 +69,10 @@ int Opensl::createPlayer(int sampleRate, int channels) {
     }
 
     int speakers;
-    if (channels > 1)
+    if (sLConfigure->channels > 1)
         speakers = SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT;
     else speakers = SL_SPEAKER_FRONT_CENTER;
-    SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, (SLuint32) channels, sr,
+    SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, (SLuint32) sLConfigure->channels, sr,
                                    SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
                                    (SLuint32) speakers, SL_BYTEORDER_LITTLEENDIAN};
     //--------------------------------------------------------------------------------
@@ -129,7 +136,7 @@ int Opensl::createPlayer(int sampleRate, int channels) {
     //注册回调缓冲区 //获取缓冲队列接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_BUFFERQUEUE, &bqPlayerBufferQueue);
     //缓冲接口回调
-    (*bqPlayerBufferQueue)->RegisterCallback(bqPlayerBufferQueue, slBufferQueueCallback, this);
+    (*bqPlayerBufferQueue)->RegisterCallback(bqPlayerBufferQueue, slBufferQueueCallback1, this);
     //获取音量接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_VOLUME, &bqPlayerVolume);
     SLmillibel pMaxLevel;
@@ -143,7 +150,7 @@ void Opensl::play() {
     if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
-        slBufferQueueCallback(bqPlayerBufferQueue, this);
+        slBufferQueueCallback1(bqPlayerBufferQueue, this);
     }
 }
 
