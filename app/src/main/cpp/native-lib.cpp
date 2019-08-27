@@ -333,7 +333,7 @@ static void decode_packet(AVPacket *pkt, bool cache) {
             pthread_mutex_lock(&f_mutex);
             if (queue.size() > 3) {
                 pthread_cond_wait(&f_cond, &f_mutex);
-                LOGI("pthread wait")
+                LOGI("pthread wait push")
                 queue.push(frame);
                 pthread_cond_signal(&f_cond);
             } else {
@@ -377,7 +377,7 @@ static void **slBufferCallback() {
         queue.pop();
         pthread_cond_signal(&f_cond);
     }
-    if(queue.empty()){
+    if (queue.empty()) {
         pthread_cond_wait(&f_cond, &f_mutex);
         if (!queue.empty()) {
             frame = queue.front();
@@ -385,7 +385,7 @@ static void **slBufferCallback() {
         }
     }
 
-    if(frame == NULL){
+    if (frame == NULL) {
         bufferSize = 0;
         result[0] = &bufferSize;
         return result;
@@ -398,25 +398,25 @@ static void **slBufferCallback() {
 //            set_clock_at(&is->extclk,
 //                         is->audio_clock + costTime,
 //                         audio_callback_time / 1000000.0);
-
-    wanted_nb_samples = synchronize_audio(is, frame->nb_samples);
+    wanted_nb_samples = frame->nb_samples;
+//    wanted_nb_samples = synchronize_audio(is, frame->nb_samples);
 
 //            int out_count = (int64_t) wanted_nb_samples * is->freq / frame->sample_rate + 256;
 //            int out_size = av_samples_get_buffer_size(NULL, is->channels, out_count, is->fmt, 0);
     int delay = 0;
-    if (wanted_nb_samples != frame->nb_samples) {
-        ret = swr_set_compensation(swr_context,
-                                   (wanted_nb_samples - frame->nb_samples) * is->freq / frame->sample_rate,
-                                   wanted_nb_samples * is->freq / frame->sample_rate);
-        if (delay < 0) {
-            LOGE("swr_set_compensation() failed");
-            bufferSize = 0;
-            result[0] = &bufferSize;
-            return result;
-        } else {
-            delay = ret;
-        }
-    }
+//    if (wanted_nb_samples != frame->nb_samples) {
+//        ret = swr_set_compensation(swr_context,
+//                                   (wanted_nb_samples - frame->nb_samples) * is->freq / frame->sample_rate,
+//                                   wanted_nb_samples * is->freq / frame->sample_rate);
+//        if (delay < 0) {
+//            LOGE("swr_set_compensation() failed");
+//            bufferSize = 0;
+//            result[0] = &bufferSize;
+//            return result;
+//        } else {
+//            delay = ret;
+//        }
+//    }
     ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
                       (const uint8_t **) frame->data, frame->nb_samples);
 //            len2 = swr_convert(swr_context, out, out_count, frame->data, frame->nb_samples);
@@ -430,7 +430,7 @@ static void **slBufferCallback() {
 //                                  (const uint8_t **) frame->data, frame->nb_samples);
 //            }
     if (ret >= 0) {
-//                LOGI("swr_convert = %d", res);
+        LOGI("swr_convert = %d", ret);
     } else {
         LOGI("swr_convert err = %d", ret);
     }
@@ -461,6 +461,15 @@ static void **slBufferCallback() {
     return result;
 }
 
+void *process(void *arg) {
+    opensl.play();
+    while (thread_flag) {
+
+    }
+    opensl.pause();
+    opensl.release();
+    return 0;
+}
 
 void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
 
@@ -537,19 +546,17 @@ void testPlayer(const char *src_filename) {
     pthread_mutex_init(&f_mutex, NULL);
     pthread_cond_init(&f_cond, NULL);
 
-//    pthread_create(&p_tid, 0, process, 0);
-
     if (audio_stream) {
         // 输出的采样率必须与输入相同
         out_sample_rate = audio_dec_ctx->sample_rate;
 //    out_buffer = (uint8_t *) av_malloc(static_cast<size_t>(out_sample_rate * out_channel * 2));
         av_samples_alloc(&out_buffer, NULL,
-                         (int) (av_get_default_channel_layout(AV_CH_LAYOUT_STEREO)),
+                         av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                          out_sample_rate,
                          AV_SAMPLE_FMT_S16, 0);
         videoState.audio_diff_threshold = out_sample_rate * 0.3;
         LOGI("out_sample_rate: %d", out_sample_rate);
-        slConfigure.channels = (int) (av_get_default_channel_layout(AV_CH_LAYOUT_STEREO));
+        slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
         slConfigure.slBufferCallback = slBufferCallback;
         opensl.createPlayer(&slConfigure);
@@ -574,7 +581,9 @@ void testPlayer(const char *src_filename) {
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
-    opensl.play();
+
+    pthread_create(&p_tid, 0, process, 0);
+
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         AVPacket orig_pkt = pkt;
@@ -586,8 +595,6 @@ void testPlayer(const char *src_filename) {
     FLOGI("flush cached frames.");
     decode_packet(&pkt, true);
     FLOGI("Demuxing succeeded.");
-    opensl.pause();
-    opensl.release();
     if (audio_stream) {
         delete[](out_buffer);
         swr_free(&swr_context);
@@ -600,7 +607,7 @@ void testPlayer(const char *src_filename) {
     pthread_cond_destroy(&f_cond);
     pthread_mutex_destroy(&f_mutex);
     thread_flag = false;
-//    pthread_join(p_tid, 0);
+    pthread_join(p_tid, 0);
 }
 
 

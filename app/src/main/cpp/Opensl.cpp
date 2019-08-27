@@ -10,13 +10,12 @@
 static void slBufferQueueCallback1(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("call %d====%d %d", pthread_self(), gettid(),audio);
     Opensl *opensl = (Opensl *) context;
-//    LOGI("decode %d", size);
     void **buffer = opensl->slConfigure->slBufferCallback();
     SLuint32 size = *((uint32_t *) buffer[0]);
     uint8_t *buf = (uint8_t *) buffer[1];
     if (size != 0) {
         SLresult result = (*bq)->Enqueue(bq, buf, size);
-        LOGI("  bqPlayerCallback :%d", result);
+        LOGI("  bqPlayerCallback :%d size:%d", result,size);
     } else {
         uint8_t b[] = {0};
         SLresult result = (*bq)->Enqueue(bq, b, 1);
@@ -27,6 +26,7 @@ static void slBufferQueueCallback1(SLAndroidSimpleBufferQueueItf bq, void *conte
 int Opensl::createPlayer(SLConfigure *sLConfigure) {
     SLuint32 sr;
     this->slConfigure = sLConfigure;
+    LOGI("sampleRate: %d, channels: %d",sLConfigure->sampleRate,sLConfigure->channels)
     switch (sLConfigure->sampleRate) {
         case 8000:
             sr = SL_SAMPLINGRATE_8;
@@ -123,15 +123,17 @@ int Opensl::createPlayer(SLConfigure *sLConfigure) {
 
     const SLInterfaceID pIds[] = {SL_IID_BUFFERQUEUE, SL_IID_VOLUME};
     const SLboolean pReq[] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
-    LOGI("SLInterfaceID sizeof: %d", sizeof(pIds))
+    LOGI("CreateAudioPlayer ")
     //创建播放器
     (*engineEngine)->CreateAudioPlayer(engineEngine, &bqPlayerObject, &slDataSource,
                                        &audioSnk, 2,
                                        pIds, pReq);
+    LOGI("CreateAudioPlayer Realize")
     //初始化播放器
     (*bqPlayerObject)->Realize(bqPlayerObject, SL_BOOLEAN_FALSE);
     //得到接口后调用  获取Player接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_PLAY, &bqPlayerPlay);
+    LOGI("CreateAudioPlayer bqPlayerObject")
     //-------------------------------------------
     //注册回调缓冲区 //获取缓冲队列接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_BUFFERQUEUE, &bqPlayerBufferQueue);
@@ -147,7 +149,9 @@ int Opensl::createPlayer(SLConfigure *sLConfigure) {
 }
 
 void Opensl::play() {
+    LOGI("play>>>>>>---->>>>>>>>>>>>>>>");
     if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
+        LOGI("play>>>>>>++++>>>>>>>>>>>>>>>");
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
         slBufferQueueCallback1(bqPlayerBufferQueue, this);

@@ -24,17 +24,23 @@ class MainActivity : AppCompatActivity() {
                     PackageManager.PERMISSION_GRANTED
                 ) {
                     if (File(srcPath).exists()) {
-                        testFF(srcPath)
+                        testPlay(srcPath)
                     }
                 } else {
                     requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 666)
                 }
             } else {
                 if (File(srcPath).exists()) {
-                    testFF(srcPath)
+                    testPlay(srcPath)
                 }
             }
         }
+    }
+
+    private fun testPlay(srcPath: String){
+        Thread(Runnable {
+            testFF(srcPath)
+        }).start()
     }
 
     private external fun testFF(path: String)
