@@ -9,7 +9,7 @@
 
 //第一次主动调用在调用线程
 //之后在新线程中回调
-static void slBufferQueueCallback1(SLAndroidSimpleBufferQueueItf bq, void *context) {
+static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
     Opensl *opensl = (Opensl *) context;
     void **buffer = opensl->slConfigure->slBufferCallback();
@@ -141,7 +141,7 @@ int Opensl::createPlayer(SLConfigure *sLConfigure) {
     //注册回调缓冲区 //获取缓冲队列接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_BUFFERQUEUE, &bqPlayerBufferQueue);
     //缓冲接口回调
-    (*bqPlayerBufferQueue)->RegisterCallback(bqPlayerBufferQueue, slBufferQueueCallback1, this);
+    (*bqPlayerBufferQueue)->RegisterCallback(bqPlayerBufferQueue, slBufferCallback, this);
     //获取音量接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_VOLUME, &bqPlayerVolume);
     SLmillibel pMaxLevel;
@@ -152,11 +152,13 @@ int Opensl::createPlayer(SLConfigure *sLConfigure) {
 }
 
 void Opensl::play() {
-    LOGI("Opensl play>>>>>");
+    LOGI("Opensl play->>>>>");
     if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
-        slBufferQueueCallback1(bqPlayerBufferQueue, this);
+        uint8_t b[] = {0};
+        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue,b,1);
+//        slBufferCallback(bqPlayerBufferQueue, this);
     }
 }
 

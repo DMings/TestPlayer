@@ -33,18 +33,15 @@ enum {
 typedef struct Clock {
     double pts;           /* clock base */
     double pts_drift;     /* clock base minus time at which we updated the clock */
-    double last_updated;
-    double speed;
-//    int serial;           /* clock is based on a packet with this serial */
-    int paused;
-    int *queue_serial;    /* pointer to the current packet queue serial, used for obsolete clock detection */
+//    double last_updated;
+    double first_time;
 } Clock;
 
 typedef struct VideoState {
 
-    Clock audclk;
-//    Clock vidclk;
-    Clock extclk;
+//    Clock audclk;
+////    Clock vidclk;
+//    Clock extclk;
 
     int audio_stream;
 
@@ -82,6 +79,8 @@ static pthread_cond_t f_cond;
 static std::queue<AVFrame *> queue;
 static pthread_t p_tid;
 static bool thread_flag = true;
+static Clock audclk;
+static Clock extclk;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
@@ -98,7 +97,6 @@ static int open_codec_context(const char *src_filename, int *stream_idx,
     } else {
         stream_index = ret;
         st = fmt_ctx->streams[stream_index];
-        /* find decoder for the stream */
         dec = avcodec_find_decoder(st->codecpar->codec_id);
         if (!dec) {
             FLOGI("Failed to find %s codec",
@@ -112,7 +110,6 @@ static int open_codec_context(const char *src_filename, int *stream_idx,
                   av_get_media_type_string(type));
             return AVERROR(ENOMEM);
         }
-        /* Copy codec parameters from input stream to output codec context */
         if ((ret = avcodec_parameters_to_context(*dec_ctx, st->codecpar)) < 0) {
             FLOGI("Failed to copy %s codec parameters to decoder context",
                   av_get_media_type_string(type));
@@ -128,145 +125,77 @@ static int open_codec_context(const char *src_filename, int *stream_idx,
     return 0;
 }
 
-
-static int get_format_from_sample_fmt(const char **fmt,
-                                      enum AVSampleFormat sample_fmt) {
-    int i;
-    struct sample_fmt_entry {
-        enum AVSampleFormat sample_fmt;
-        const char *fmt_be, *fmt_le;
-    }
-            sample_fmt_entries[] = {
-            {AV_SAMPLE_FMT_U8,  "u8",    "u8"},
-            {AV_SAMPLE_FMT_S16, "s16be", "s16le"},
-            {AV_SAMPLE_FMT_S32, "s32be", "s32le"},
-            {AV_SAMPLE_FMT_FLT, "f32be", "f32le"},
-            {AV_SAMPLE_FMT_DBL, "f64be", "f64le"},
-    };
-    *fmt = NULL;
-    for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
-        struct sample_fmt_entry *entry = &sample_fmt_entries[i];
-        if (sample_fmt == entry->sample_fmt) {
-            *fmt = AV_NE(entry->fmt_be, entry->fmt_le);
-            return 0;
-        }
-    }
-    FLOGI("sample format %s is not supported as output format",
-          av_get_sample_fmt_name(sample_fmt));
-    return -1;
-}
-
-static void set_clock_at(Clock *c, double pts, double time) {
-    c->pts = pts;
-    c->last_updated = time;
-//    c->pts_drift = c->pts - time;
-    c->pts_drift = 0;
-}
-
-static void set_clock(Clock *c, double pts) {
-    double time = av_gettime_relative() / 1000000.0;
-    set_clock_at(c, pts, time);
-}
-
-static void init_clock(Clock *c) {
-    c->speed = 1.0;
-    c->paused = 0;
-    set_clock(c, NAN);
-}
-
-static int get_master_sync_type(VideoState *is) {
-//    if (is->av_sync_type == AV_SYNC_VIDEO_MASTER) {
-//        if (is->video_st)
-//            return AV_SYNC_VIDEO_MASTER;
-//        else
-//            return AV_SYNC_AUDIO_MASTER;
-//    } else if (is->av_sync_type == AV_SYNC_AUDIO_MASTER) {
-//        if (is->audio_st)
-//            return AV_SYNC_AUDIO_MASTER;
-//        else
-//            return AV_SYNC_EXTERNAL_CLOCK;
-//    } else {
-    return AV_SYNC_EXTERNAL_CLOCK;
-//    }
-}
-
-static double get_clock(Clock *c) {
-//    if (*c->queue_serial != c->serial)
-//        return NAN;
-//    if (c->paused) {
-//        return c->pts;
-//    } else {
-    double time = av_gettime_relative() / 1000000.0;
-    return c->pts_drift + time - (time - c->last_updated);
-//    return c->pts_drift + time - (time - c->last_updated) * (1.0 - c->speed);
-//    }
-}
-
-/* get the current master clock value */
-//static double get_master_clock(VideoState *is)
-//{
-//    double val;
-//
-//    switch (get_master_sync_type(is)) {
-////        case AV_SYNC_VIDEO_MASTER:
-////            val = get_clock(&is->vidclk);
-////            break;
-//        case AV_SYNC_AUDIO_MASTER:
-//            val = get_clock(&is->audclk);
-//            break;
-//        default:
-//            val = get_clock(&is->extclk);
-//            break;
-//    }
-//    return val;
+//static void set_clock(Clock *c, double pts) {
+//    c->pts = pts;
+////    c->last_updated = av_gettime_relative() / 1000000.0; // ms
 //}
 
-static void sync_clock_to_slave(Clock *c, Clock *slave) {
-    double clock = get_clock(c);
-    double slave_clock = get_clock(slave);
-    if (!isnan(slave_clock) && (isnan(clock) || fabs(clock - slave_clock) > AV_NOSYNC_THRESHOLD))
-        set_clock(c, slave_clock);
+static double get_master_clock() {
+    double time = av_gettime_relative() / 1000.0;
+    if (extclk.first_time == 0) {
+        extclk.first_time = time;
+    }
+    return extclk.pts_drift + time - extclk.first_time; // ms
 }
 
-/* return the wanted number of samples to get better sync if sync_type is video
- * or external master clock */
-static int synchronize_audio(VideoState *is, int nb_samples) {
-    int wanted_nb_samples = nb_samples;
+static double get_audio_clock() {
+    return audclk.pts_drift + audclk.pts; // ms
+}
 
-    /* if not master, then we try to remove or add samples to correct the clock */
-    if (get_master_sync_type(is) != AV_SYNC_AUDIO_MASTER) {
-        double diff, avg_diff;
-        int min_nb_samples, max_nb_samples;
-
-        diff = get_clock(&is->audclk) - get_clock(&is->extclk);
-
-        if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD) {
-            is->audio_diff_cum = diff + is->audio_diff_avg_coef * is->audio_diff_cum;
-            if (is->audio_diff_avg_count < AUDIO_DIFF_AVG_NB) {
-                /* not enough measures to have a correct estimate */
-                is->audio_diff_avg_count++;
+static int synchronize_audio(int nb_samples) {
+    int wanted_nb_samples;
+    double diff_ms;
+    double nb_time_ms;
+//    LOGI("get_audio_clock: %f get_master_clock: %f", get_audio_clock(), get_master_clock());
+    diff_ms = get_audio_clock() - get_master_clock();
+    nb_time_ms = 1.0 * nb_samples / audio_dec_ctx->sample_rate * 1000; // ms
+    if (fabs(diff_ms) > nb_time_ms * 0.2) { // 超过阀值
+        if (diff_ms < 0) { // 音频落后时间
+            if (-diff_ms < nb_time_ms) { // 音频比较迟，要丢帧追上
+                wanted_nb_samples = (int) (( 1 + diff_ms / nb_time_ms) * nb_samples);
             } else {
-                /* estimate the A-V difference */
-                avg_diff = is->audio_diff_cum * (1.0 - is->audio_diff_avg_coef);
-
-                if (fabs(avg_diff) >= is->audio_diff_threshold) {
-                    wanted_nb_samples = nb_samples + (int) (diff * is->freq);
-                    min_nb_samples = ((nb_samples * (100 - SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-                    max_nb_samples = ((nb_samples * (100 + SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-                    wanted_nb_samples = av_clip(wanted_nb_samples, min_nb_samples, max_nb_samples);
-                }
-                LOGI("diff=%f adiff=%f sample_diff=%d apts=%0.3f %f",
-                     diff, avg_diff, wanted_nb_samples - nb_samples,
-                     is->audio_clock, is->audio_diff_threshold);
+                wanted_nb_samples = 0;
             }
-        } else {
-            /* too big difference : may be initial PTS errors, so
-               reset A-V filter */
-            is->audio_diff_avg_count = 0;
-            is->audio_diff_cum = 0;
+//            LOGI("diff_ms: %f nb_time_ms: %f", diff_ms, nb_time_ms);
+//            LOGI("wanted_nb_samples: %d diff_ms / nb_time_ms: %.6f,nb_samples: %d", wanted_nb_samples,(-diff_ms / nb_time_ms),nb_samples);
+            if (wanted_nb_samples < 0.2 * nb_samples) {  // 给上阀值，不能少于某一个采样率
+                wanted_nb_samples = (int) (0.2 * nb_samples);
+            }
+        } else { // 音频超过时间
+            if (diff_ms < nb_time_ms) { // 音频比较快，要增加帧，变慢
+                wanted_nb_samples = (int) (diff_ms / nb_time_ms * nb_samples + nb_samples);
+            } else {
+                wanted_nb_samples = nb_samples + nb_samples;
+            }
         }
+    } else {
+        wanted_nb_samples = nb_samples;
     }
-
+//        if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD) {
+//            is->audio_diff_cum = diff + is->audio_diff_avg_coef * is->audio_diff_cum;
+//            if (is->audio_diff_avg_count < AUDIO_DIFF_AVG_NB) {
+//                /* not enough measures to have a correct estimate */
+//                is->audio_diff_avg_count++;
+//            } else {
+//                /* estimate the A-V difference */
+//                avg_diff = is->audio_diff_cum * (1.0 - is->audio_diff_avg_coef);
+//
+//                if (fabs(avg_diff) >= is->audio_diff_threshold) {
+//                    wanted_nb_samples = nb_samples + (int) (diff * is->freq);
+//                    min_nb_samples = ((nb_samples * (100 - SAMPLE_CORRECTION_PERCENT_MAX) / 100));
+//                    max_nb_samples = ((nb_samples * (100 + SAMPLE_CORRECTION_PERCENT_MAX) / 100));
+//                    wanted_nb_samples = av_clip(wanted_nb_samples, min_nb_samples, max_nb_samples);
+//                }
+//                LOGI("diff=%f adiff=%f sample_diff=%d apts=%0.3f %f",
+//                     diff, avg_diff, wanted_nb_samples - nb_samples,
+//                     is->audio_clock, is->audio_diff_threshold);
+//            }
+//        } else {
+//            /* too big difference : may be initial PTS errors, so
+//               reset A-V filter */
+//            is->audio_diff_avg_count = 0;
+//            is->audio_diff_cum = 0;
+//        }
     return wanted_nb_samples;
 }
 
@@ -333,13 +262,13 @@ static void decode_packet(AVPacket *pkt, bool cache) {
             pthread_mutex_lock(&f_mutex);
             if (queue.size() > 3) {
                 pthread_cond_wait(&f_cond, &f_mutex);
-                LOGI("pthread wait push")
+//                LOGI("pthread wait push")
                 queue.push(frame);
                 pthread_cond_signal(&f_cond);
             } else {
                 queue.push(frame);
                 pthread_cond_signal(&f_cond);
-                LOGI("pthread push")
+//                LOGI("pthread push")
             }
             pthread_mutex_unlock(&f_mutex);
         }
@@ -393,18 +322,12 @@ static void **slBufferCallback() {
     }
 
     pthread_mutex_unlock(&f_mutex);
-    VideoState *is = &videoState;
 
-//    void* result = me
-//            set_clock_at(&is->extclk,
-//                         is->audio_clock + costTime,
-//                         audio_callback_time / 1000000.0);
-    wanted_nb_samples = frame->nb_samples;
-//    wanted_nb_samples = synchronize_audio(is, frame->nb_samples);
-
+    audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000; // ms
+    wanted_nb_samples = synchronize_audio(frame->nb_samples);
 //            int out_count = (int64_t) wanted_nb_samples * is->freq / frame->sample_rate + 256;
 //            int out_size = av_samples_get_buffer_size(NULL, is->channels, out_count, is->fmt, 0);
-    int delay = 0;
+//    int delay = 0;
 //    if (wanted_nb_samples != frame->nb_samples) {
 //        ret = swr_set_compensation(swr_context,
 //                                   (wanted_nb_samples - frame->nb_samples) * is->freq / frame->sample_rate,
@@ -431,9 +354,9 @@ static void **slBufferCallback() {
 //                                  (const uint8_t **) frame->data, frame->nb_samples);
 //            }
     if (ret >= 0) {
-        LOGI("swr_convert = %d wanted_nb_samples: %d", ret,wanted_nb_samples);
+        LOGI("swr_convert len: %d wanted_nb_samples: %d", ret,wanted_nb_samples);
     } else {
-        LOGI("swr_convert err = %d", ret);
+        LOGE("swr_convert err = %d", ret);
     }
 //    audio_callback_time = av_gettime_relative();
 ////            AVRational tb = (AVRational) {1, frame->sample_rate};
@@ -461,15 +384,15 @@ static void **slBufferCallback() {
     return result;
 }
 
-void *process(void *arg) {
-    opensl.play();
-    while (thread_flag){
-
-    }
-    opensl.pause();
-    opensl.release();
-    return 0;
-}
+//void *process(void *arg) {
+//    opensl.play();
+//    while (thread_flag){
+//
+//    }
+//    opensl.pause();
+//    opensl.release();
+//    return 0;
+//}
 
 void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
 
@@ -526,16 +449,16 @@ void testPlayer(const char *src_filename) {
     if (audio_stream) {
         enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
         n_channels = audio_dec_ctx->channels;
-        LOGI(">>>n_channels: %d", n_channels);
+//        LOGI(">>>n_channels: %d", n_channels);
 //        const char *fmt;
-        if (av_sample_fmt_is_planar(sfmt)) {
-            const char *packed = av_get_sample_fmt_name(sfmt);
-            FLOGI("Warning: the sample format the decoder produced is planar (%s). "
-                  "This example will output the first channel only.",
-                  packed ? packed : "?");
-            sfmt = av_get_packed_sample_fmt(sfmt);
-            n_channels = 1;
-        }
+//        if (av_sample_fmt_is_planar(sfmt)) {
+//            const char *packed = av_get_sample_fmt_name(sfmt);
+//            FLOGI("Warning: the sample format the decoder produced is planar (%s). "
+//                  "This example will output the first channel only.",
+//                  packed ? packed : "?");
+//            sfmt = av_get_packed_sample_fmt(sfmt);
+//            n_channels = 1;
+//        }
 //        if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
 //            goto end;
         FLOGI("ffplay -ac %d -ar %d byte %d", n_channels, audio_dec_ctx->sample_rate, av_get_bytes_per_sample(sfmt));
@@ -547,15 +470,14 @@ void testPlayer(const char *src_filename) {
     pthread_cond_init(&f_cond, NULL);
 
     if (audio_stream) {
-        // 输出的采样率必须与输入相同
         out_sample_rate = audio_dec_ctx->sample_rate;
 //    out_buffer = (uint8_t *) av_malloc(static_cast<size_t>(out_sample_rate * out_channel * 2));
         int s = av_samples_alloc(&out_buffer, NULL,
-                         av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
-                         out_sample_rate,
-                         AV_SAMPLE_FMT_S16, 0);
-        videoState.audio_diff_threshold = out_sample_rate * 0.3;
-        LOGI("out_sample_rate: %d s: %d", out_sample_rate,s);
+                                 av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
+                                 out_sample_rate,
+                                 AV_SAMPLE_FMT_S16, 0);
+        videoState.audio_diff_threshold = out_sample_rate * 0.05;
+        LOGI("out_sample_rate: %d s: %d", out_sample_rate, s);
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
         slConfigure.slBufferCallback = slBufferCallback;
@@ -576,13 +498,14 @@ void testPlayer(const char *src_filename) {
     videoState.freq = out_sample_rate;
     videoState.fmt = AV_SAMPLE_FMT_S16;
     //
-    init_clock(&videoState.audclk);
+//    init_clock(&videoState.audclk);
     //
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
 
-    pthread_create(&p_tid, 0, process, 0);
+    opensl.play();
+//    pthread_create(&p_tid, 0, process, 0);
 
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
@@ -604,10 +527,12 @@ void testPlayer(const char *src_filename) {
     avcodec_free_context(&audio_dec_ctx);
     avformat_close_input(&fmt_ctx);
 
+    opensl.pause();
+    opensl.release();
     pthread_cond_destroy(&f_cond);
     pthread_mutex_destroy(&f_mutex);
     thread_flag = false;
-    pthread_join(p_tid, 0);
+//    pthread_join(p_tid, 0);
 }
 
 
