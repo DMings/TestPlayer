@@ -146,15 +146,16 @@ static int synchronize_audio(int nb_samples) {
     int wanted_nb_samples;
     double diff_ms;
     double nb_time_ms;
-//    LOGI("get_audio_clock: %f get_master_clock: %f", get_audio_clock(), get_master_clock());
+//    LOGI("get_audio_clock: %f get_master_clock: %f nb_samples: %d", get_audio_clock(), get_master_clock(), nb_samples);
     diff_ms = get_audio_clock() - get_master_clock();
     nb_time_ms = 1.0 * nb_samples / audio_dec_ctx->sample_rate * 1000; // ms
+    LOGI("diff_ms: %f nb_time_ms: %f", diff_ms, nb_time_ms);
     if (fabs(diff_ms) > nb_time_ms * 0.2) { // 超过阀值
         if (diff_ms < 0) { // 音频落后时间
-            if (-diff_ms < nb_time_ms) { // 音频比较迟，要丢帧追上
-                wanted_nb_samples = (int) (( 1 + diff_ms / nb_time_ms) * nb_samples);
+            if (-diff_ms < nb_time_ms) { // 音频比较慢，要增加帧，加时超过时基
+                wanted_nb_samples = (int) ((1 - diff_ms / nb_time_ms) * nb_samples);
             } else {
-                wanted_nb_samples = 0;
+                wanted_nb_samples = nb_samples + nb_samples;
             }
 //            LOGI("diff_ms: %f nb_time_ms: %f", diff_ms, nb_time_ms);
 //            LOGI("wanted_nb_samples: %d diff_ms / nb_time_ms: %.6f,nb_samples: %d", wanted_nb_samples,(-diff_ms / nb_time_ms),nb_samples);
@@ -162,10 +163,14 @@ static int synchronize_audio(int nb_samples) {
                 wanted_nb_samples = (int) (0.2 * nb_samples);
             }
         } else { // 音频超过时间
-            if (diff_ms < nb_time_ms) { // 音频比较快，要增加帧，变慢
-                wanted_nb_samples = (int) (diff_ms / nb_time_ms * nb_samples + nb_samples);
+            if (diff_ms < nb_time_ms) { // 音频比较快，要减少帧，加快下一帧
+//                wanted_nb_samples = (int) (diff_ms / nb_time_ms * nb_samples + nb_samples);
+                wanted_nb_samples = (int) (( diff_ms / nb_time_ms) * nb_samples);
             } else {
-                wanted_nb_samples = nb_samples + nb_samples;
+                wanted_nb_samples = 0;
+            }
+            if (wanted_nb_samples < 0.2 * nb_samples) {  // 给上阀值，不能少于某一个采样率
+                wanted_nb_samples = (int) (0.2 * nb_samples);
             }
         }
     } else {
@@ -323,24 +328,8 @@ static void **slBufferCallback() {
 
     pthread_mutex_unlock(&f_mutex);
 
-    audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000; // ms
+    audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
     wanted_nb_samples = synchronize_audio(frame->nb_samples);
-//            int out_count = (int64_t) wanted_nb_samples * is->freq / frame->sample_rate + 256;
-//            int out_size = av_samples_get_buffer_size(NULL, is->channels, out_count, is->fmt, 0);
-//    int delay = 0;
-//    if (wanted_nb_samples != frame->nb_samples) {
-//        ret = swr_set_compensation(swr_context,
-//                                   (wanted_nb_samples - frame->nb_samples) * is->freq / frame->sample_rate,
-//                                   wanted_nb_samples * is->freq / frame->sample_rate);
-//        if (delay < 0) {
-//            LOGE("swr_set_compensation() failed");
-//            bufferSize = 0;
-//            result[0] = &bufferSize;
-//            return result;
-//        } else {
-//            delay = ret;
-//        }
-//    }
     ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
                       (const uint8_t **) frame->data, frame->nb_samples);
 //            len2 = swr_convert(swr_context, out, out_count, frame->data, frame->nb_samples);
@@ -354,29 +343,11 @@ static void **slBufferCallback() {
 //                                  (const uint8_t **) frame->data, frame->nb_samples);
 //            }
     if (ret >= 0) {
-        LOGI("swr_convert len: %d wanted_nb_samples: %d", ret,wanted_nb_samples);
+        LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
     } else {
         LOGE("swr_convert err = %d", ret);
     }
-//    audio_callback_time = av_gettime_relative();
-////            AVRational tb = (AVRational) {1, frame->sample_rate};
-////            av_rescale_q(frame->pts, audio_dec_ctx->pkt_timebase, tb);
-//    double pts = av_q2d(audio_dec_ctx->pkt_timebase) * frame->pts;
-//    double costTime = (double) 1000000.0 * wanted_nb_samples / frame->sample_rate;
-//
-//    LOGI("costTime: %f wanted_nb_samples: %d len: %d delay: %d pts: %f frame->pts: %d", costTime,
-//         wanted_nb_samples, ret,
-//         delay, pts, frame->pts);
 //    av_usleep((unsigned int) costTime + 10000);
-//
-//    if (isnan(is->audio_clock)) {
-//        is->audio_clock = pts + costTime;
-//    }
-    // 播放音频
-//                swr_convert(swr_context, &out_buffer, 44100 * 2, (const uint8_t **) frame->data, frame->nb_samples);
-//                int size = av_samples_get_buffer_size(NULL, out_channels, frame->nb_samples, AV_SAMPLE_FMT_S16, 1);
-//            LOGI("nb_samples: %d channels: %d sample_rate: %d", frame->nb_samples, frame->channels,
-//                 frame->sample_rate);
     av_frame_free(&frame);
     bufferSize = (uint32_t) ret * 4;
     result[0] = &bufferSize;
