@@ -42,21 +42,24 @@ static AVFormatContext *fmt_ctx = NULL;
 static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx = NULL;
 static int video_stream_idx = -1, audio_stream_idx = -1;
 static AVStream *video_stream = NULL, *audio_stream = NULL;
-//static AVFrame* frame = NULL;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
 static Opensl opensl;
 static struct SwrContext *swr_context;
 static uint8_t *out_buffer;
 static int wanted_nb_samples;
-static pthread_mutex_t f_mutex;
-static pthread_cond_t f_cond;
+static pthread_mutex_t c_mutex;
+static pthread_cond_t c_cond;
+static pthread_cond_t a_cond;
+static pthread_cond_t v_cond;
 //static std::queue<AVFrame *> audio_queue;
 static pthread_t p_tid;
 static bool thread_flag = true;
+static Clock vidclk;
 static Clock audclk;
 static Clock extclk;
 static std::list<AVFrame *> audio_list;
+static std::list<AVFrame *> video_list;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
@@ -183,14 +186,10 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
         pkt->size = 0;
     }
     if (pkt->stream_index == video_stream_idx) {
-        av_usleep(10000); // us
-        pthread_cond_signal(&f_cond);
-
-
 //        // 解码
 //        ret = avcodec_send_packet(video_dec_ctx, pkt);
 //        if (ret < 0) {
-//            LOGE("Error sending a packet for decoding");
+//            LOGE("Error video sending a packet for decoding");
 //            return;
 //        }
 //        while (ret >= 0) {
@@ -204,14 +203,35 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
 //                av_frame_free(&frame);
 //                return;
 //            }
-//            av_usleep(10000); // us
-//            av_frame_free(&frame);
+//            pthread_mutex_lock(&c_mutex);
+//            if (video_list.size() > 3) {
+//                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+////                LOGI("pthread wait push")
+//                if (video_list.size() > 3) { // xx音频已经累积了2.5秒的数据，有点多了
+//                    int i = 0;
+//                    for (std::list<AVFrame *>::iterator iterator = video_list.begin();
+//                         iterator != video_list.end(); ++iterator) {
+//                        i++;
+//                        if (i == 2) {
+//                            iterator = video_list.erase(iterator);
+//                            av_frame_free(&(*iterator));
+//                        }
+//                    }
+//                }
+//                audio_list.push_back(frame);
+//                pthread_cond_signal(&v_cond); // 假如消费过快，就需要通知，有数据到了
+//            } else {
+//                audio_list.push_back(frame);
+//                pthread_cond_signal(&v_cond);
+////                LOGI("pthread push")
+//            }
+//            pthread_mutex_unlock(&c_mutex);
 //        }
     } else if (pkt->stream_index == audio_stream_idx) {
         // 解码
         ret = avcodec_send_packet(audio_dec_ctx, pkt);
         if (ret < 0) {
-            LOGE("Error sending a packet for decoding");
+            LOGE("Error audio sending a packet for decoding");
             return;
         }
         while (ret >= 0) {
@@ -225,9 +245,9 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
                 av_frame_free(&frame);
                 return;
             }
-            pthread_mutex_lock(&f_mutex);
+            pthread_mutex_lock(&c_mutex);
             if (audio_list.size() > 3) {
-                pthread_cond_wait(&f_cond, &f_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+                pthread_cond_wait(&v_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
 //                LOGI("pthread wait push")
 
                 int nb_samples_count = 0;
@@ -243,19 +263,19 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
                          iterator != audio_list.end(); ++iterator) {
                         i++;
                         if (i % 2 == 0) {
-                            audio_list.erase(iterator);
+                            iterator = audio_list.erase(iterator);
                             av_frame_free(&(*iterator));
                         }
                     }
                 }
                 audio_list.push_back(frame);
-                pthread_cond_signal(&f_cond); // 假如消费过快，就需要通知，有数据到了
+                pthread_cond_signal(&a_cond); // 假如消费过快，就需要通知，有数据到了
             } else {
                 audio_list.push_back(frame);
-                pthread_cond_signal(&f_cond);
+                pthread_cond_signal(&a_cond);
 //                LOGI("pthread push")
             }
-            pthread_mutex_unlock(&f_mutex);
+            pthread_mutex_unlock(&c_mutex);
         }
     }
 }
@@ -264,20 +284,20 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
     int ret = 0;
     AVFrame *frame = NULL;
 
-    pthread_mutex_lock(&f_mutex);
+    pthread_mutex_lock(&c_mutex);
     if (!audio_list.empty()) {
         frame = audio_list.front();
         audio_list.pop_front();
-        pthread_cond_signal(&f_cond);
+        pthread_cond_signal(&c_cond);
     }
     if (audio_list.empty()) {
-        pthread_cond_wait(&f_cond, &f_mutex);
+        pthread_cond_wait(&a_cond, &c_mutex);
         if (!audio_list.empty()) {
             frame = audio_list.front();
             audio_list.pop_front();
         }
     }
-    pthread_mutex_unlock(&f_mutex);
+    pthread_mutex_unlock(&c_mutex);
 
     if (frame == NULL) {
         *bufferSize = 0;
@@ -307,15 +327,37 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
     return;
 }
 
-//void *process(void *arg) {
-//    opensl.play();
-//    while (thread_flag){
+void *videoProcess(void *arg) {
+//    while (thread_flag) {
 //
+//        int ret = 0;
+//        AVFrame *frame = NULL;
+//
+//        pthread_mutex_lock(&c_mutex);
+//        if (!video_list.empty()) {
+//            frame = video_list.front();
+//            video_list.pop_front();
+//            pthread_cond_signal(&c_cond);
+//        }
+//        if (video_list.empty()) {
+//            pthread_cond_wait(&v_cond, &c_mutex);
+//            if (!video_list.empty()) {
+//                frame = video_list.front();
+//                video_list.pop_front();
+//            }
+//        }
+//        pthread_mutex_unlock(&c_mutex);
+//
+//        if (frame == NULL) {
+//            LOGE("frame null !!!");
+//            continue;
+//        }
+//        LOGI("video show");
+//        av_usleep(10000); // us
+//        av_frame_free(&frame);
 //    }
-//    opensl.pause();
-//    opensl.release();
-//    return 0;
-//}
+    return 0;
+}
 
 void ffmpegCallback(void *ptr, int level, const char *fmt, va_list vl) {
 
@@ -331,7 +373,12 @@ void testPlayer(const char *src_filename) {
     int ret = 0;
     AVPacket pkt;
     int out_sample_rate = 0;
-    SLConfigure slConfigure;
+    SLConfigure slConfigure = {
+            0,
+            1,
+            0,
+            NULL
+    };
 
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
@@ -372,8 +419,9 @@ void testPlayer(const char *src_filename) {
               av_get_bytes_per_sample(sfmt));
     }
 
-    pthread_mutex_init(&f_mutex, NULL);
-    pthread_cond_init(&f_cond, NULL);
+    pthread_mutex_init(&c_mutex, NULL);
+    pthread_cond_init(&a_cond, NULL);
+    pthread_cond_init(&v_cond, NULL);
 
     if (audio_stream) {
         out_sample_rate = audio_dec_ctx->sample_rate;
@@ -407,7 +455,7 @@ void testPlayer(const char *src_filename) {
     pkt.size = 0;
 
     opensl.play();
-//    pthread_create(&p_tid, 0, process, 0);
+    pthread_create(&p_tid, 0, videoProcess, 0);
 
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
@@ -431,10 +479,11 @@ void testPlayer(const char *src_filename) {
 
     opensl.pause();
     opensl.release();
-    pthread_cond_destroy(&f_cond);
-    pthread_mutex_destroy(&f_mutex);
+    pthread_cond_destroy(&a_cond);
+    pthread_cond_destroy(&v_cond);
+    pthread_mutex_destroy(&c_mutex);
     thread_flag = false;
-//    pthread_join(p_tid, 0);
+    pthread_join(p_tid, 0);
 }
 
 
