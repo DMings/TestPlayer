@@ -12,13 +12,13 @@
 static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
     Opensl *opensl = (Opensl *) context;
-    void **buffer = opensl->slConfigure->slBufferCallback();
+    uint8_t *buffer;
+    SLuint32 bufferSize;
 
-    SLuint32 size = *((uint32_t *) buffer[0]);
-    uint8_t *buf = (uint8_t *) buffer[1];
-    if (size != 0) {
-        SLresult result = (*bq)->Enqueue(bq, buf, size);
-//        LOGI("  bqPlayerCallback :%d size:%d buf[0]: %x buf[1]: %x", result,size,buf[0],buf[1]);
+    opensl->slConfigure->slBufferCallback(&buffer, &bufferSize);
+    if (bufferSize > 0) {
+        SLresult result = (*bq)->Enqueue(bq, buffer, bufferSize);
+//        LOGI("  bqPlayerCallback :%d size:%d", result, bufferSize);
     } else {
         uint8_t b[] = {0};
         SLresult result = (*bq)->Enqueue(bq, b, 1);
@@ -29,7 +29,7 @@ static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 int Opensl::createPlayer(SLConfigure *sLConfigure) {
     SLuint32 sr;
     this->slConfigure = sLConfigure;
-    LOGI("sampleRate: %d, channels: %d",sLConfigure->sampleRate,sLConfigure->channels)
+    LOGI("sampleRate: %d, channels: %d", sLConfigure->sampleRate, sLConfigure->channels)
     switch (sLConfigure->sampleRate) {
         case 8000:
             sr = SL_SAMPLINGRATE_8;
@@ -157,7 +157,7 @@ void Opensl::play() {
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
         uint8_t b[] = {0};
-        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue,b,1);
+        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, b, 1);
 //        slBufferCallback(bqPlayerBufferQueue, this);
     }
 }

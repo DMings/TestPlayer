@@ -8,9 +8,9 @@
 #include <SLES/OpenSLES_Android.h>
 #include "log.h"
 
-typedef void** (*SlBufferCallback)();
+typedef void (*SlBufferCallback)(uint8_t **buffer, uint32_t *bufferSize);
 
-typedef struct SLConfigure{
+typedef struct SLConfigure {
     int sampleRate;
     int channels;
     int64_t fmt;
@@ -27,7 +27,7 @@ private:
     SLPlayItf bqPlayerPlay = NULL;
     SLAndroidSimpleBufferQueueItf bqPlayerBufferQueue = NULL;
 public:
-    SLConfigure* slConfigure;
+    SLConfigure *slConfigure;
 
     int createPlayer(SLConfigure *sLConfigure);
 
