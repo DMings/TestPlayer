@@ -58,8 +58,11 @@ static bool thread_flag = true;
 static Clock vidclk;
 static Clock audclk;
 static Clock extclk;
-static std::list<AVFrame *> audio_list;
-static std::list<AVFrame *> video_list;
+static std::list<AVFrame *> audio_frame_list;
+//static std::list<AVFrame *> video_frame_list;
+
+static std::list<AVPacket *> audio_pkt_list;
+static std::list<AVPacket *> video_pkt_list;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
@@ -150,6 +153,7 @@ static int synchronize_audio(int nb_samples) {
     } else {
         wanted_nb_samples = nb_samples;
     }
+    LOGI("diff_ms: %f wanted_nb_samples: %d", diff_ms, wanted_nb_samples);
 //        if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD) {
 //            is->audio_diff_cum = diff + is->audio_diff_avg_coef * is->audio_diff_cum;
 //            if (is->audio_diff_avg_count < AUDIO_DIFF_AVG_NB) {
@@ -186,48 +190,27 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
         pkt->size = 0;
     }
     if (pkt->stream_index == video_stream_idx) {
-//        // 解码
-//        ret = avcodec_send_packet(video_dec_ctx, pkt);
-//        if (ret < 0) {
-//            LOGE("Error video sending a packet for decoding");
-//            return;
-//        }
-//        while (ret >= 0) {
-//            AVFrame *frame = av_frame_alloc();
-//            ret = avcodec_receive_frame(video_dec_ctx, frame);
-//            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-//                av_frame_free(&frame);
-//                return;
-//            } else if (ret < 0) {
-//                LOGE("Error during decoding");
-//                av_frame_free(&frame);
-//                return;
-//            }
-//            pthread_mutex_lock(&c_mutex);
-//            if (video_list.size() > 3) {
-//                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
-////                LOGI("pthread wait push")
-//                if (video_list.size() > 3) { // xx音频已经累积了2.5秒的数据，有点多了
-//                    int i = 0;
-//                    for (std::list<AVFrame *>::iterator iterator = video_list.begin();
-//                         iterator != video_list.end(); ++iterator) {
-//                        i++;
-//                        if (i == 2) {
-//                            iterator = video_list.erase(iterator);
-//                            av_frame_free(&(*iterator));
-//                        }
-//                    }
-//                }
-//                audio_list.push_back(frame);
-//                pthread_cond_signal(&v_cond); // 假如消费过快，就需要通知，有数据到了
-//            } else {
-//                audio_list.push_back(frame);
-//                pthread_cond_signal(&v_cond);
-////                LOGI("pthread push")
-//            }
-//            pthread_mutex_unlock(&c_mutex);
-//        }
+        double t = av_gettime_relative();
+        AVPacket *copy_pkg = av_packet_clone(pkt);
+        if (copy_pkg != NULL) {
+            pthread_mutex_lock(&c_mutex);
+            if (video_pkt_list.size() > 3) {
+                // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
+                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+                if (video_pkt_list.size() > 5) {
+                    LOGE("pthread_cond_wait video_pkt_list %d", video_pkt_list.size());
+                }
+                video_pkt_list.push_back(copy_pkg);
+                pthread_cond_signal(&v_cond); // 假如消费过快，就需要通知，有数据到了
+            } else {
+                video_pkt_list.push_back(copy_pkg);
+                pthread_cond_signal(&v_cond);
+            }
+            pthread_mutex_unlock(&c_mutex);
+        }
+        LOGE("video cost time: %f",(av_gettime_relative() - t) / 1000);
     } else if (pkt->stream_index == audio_stream_idx) {
+        double t = av_gettime_relative();
         // 解码
         ret = avcodec_send_packet(audio_dec_ctx, pkt);
         if (ret < 0) {
@@ -241,42 +224,47 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
                 av_frame_free(&frame);
                 return;
             } else if (ret < 0) {
-                LOGE("Error during decoding");
+                LOGE("Error audio during decoding");
                 av_frame_free(&frame);
                 return;
             }
+            LOGE("check audio_frame_list %d", audio_frame_list.size());
             pthread_mutex_lock(&c_mutex);
-            if (audio_list.size() > 3) {
-                pthread_cond_wait(&v_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
-//                LOGI("pthread wait push")
-
+            if (audio_frame_list.size() > 3) {
+                // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
+                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+                if (audio_frame_list.size() > 5) {
+                    LOGE("pthread_cond_wait audio_frame_list %d", audio_frame_list.size());
+                }
                 int nb_samples_count = 0;
-                for (std::list<AVFrame *>::iterator iterator = audio_list.begin();
-                     iterator != audio_list.end(); ++iterator) {
+                for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
+                     iterator != audio_frame_list.end(); ++iterator) {
                     nb_samples_count += (*iterator)->nb_samples;
                 }
-                if (nb_samples_count > audio_dec_ctx->sample_rate * 2.5) { // 音频已经累积了2.5秒的数据，有点多了
-                    LOGI("nb_samples_count: %d,sample_rate: %d", nb_samples_count, audio_dec_ctx->sample_rate);
+                if (nb_samples_count > audio_dec_ctx->sample_rate * 1.5) { // 音频已经累积了1.5秒的数据，有点多了,低概率
+                    LOGE("nb_samples_count: %d,sample_rate: %d", nb_samples_count, audio_dec_ctx->sample_rate);
                     // 这里采用丢弃一半的策略，丢弃偶数索引；
                     int i = 0;
-                    for (std::list<AVFrame *>::iterator iterator = audio_list.begin();
-                         iterator != audio_list.end(); ++iterator) {
+                    for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
+                         iterator != audio_frame_list.end();) {
                         i++;
                         if (i % 2 == 0) {
-                            iterator = audio_list.erase(iterator);
+                            iterator = audio_frame_list.erase(iterator);
                             av_frame_free(&(*iterator));
+                        } else {
+                            iterator++;
                         }
                     }
                 }
-                audio_list.push_back(frame);
+                audio_frame_list.push_back(frame);
                 pthread_cond_signal(&a_cond); // 假如消费过快，就需要通知，有数据到了
             } else {
-                audio_list.push_back(frame);
+                audio_frame_list.push_back(frame);
                 pthread_cond_signal(&a_cond);
-//                LOGI("pthread push")
             }
             pthread_mutex_unlock(&c_mutex);
         }
+        LOGE("audio cost time: %f",(av_gettime_relative() - t) / 1000);
     }
 }
 
@@ -285,28 +273,42 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
     AVFrame *frame = NULL;
 
     pthread_mutex_lock(&c_mutex);
-    if (!audio_list.empty()) {
-        frame = audio_list.front();
-        audio_list.pop_front();
-        pthread_cond_signal(&c_cond);
+    if (!audio_frame_list.empty()) {
+        frame = audio_frame_list.front();
+        audio_frame_list.pop_front();
+        if (audio_frame_list.size() <= 2 && audio_frame_list.size() > 0) {
+            pthread_cond_signal(&c_cond);
+        }
     }
-    if (audio_list.empty()) {
+    if (audio_frame_list.empty()) {
+        pthread_cond_signal(&c_cond);
         pthread_cond_wait(&a_cond, &c_mutex);
-        if (!audio_list.empty()) {
-            frame = audio_list.front();
-            audio_list.pop_front();
+        if (!audio_frame_list.empty()) {
+            frame = audio_frame_list.front();
+            audio_frame_list.pop_front();
         }
     }
     pthread_mutex_unlock(&c_mutex);
 
+    LOGE("sl check audio_frame_list %d", audio_frame_list.size());
+
     if (frame == NULL) {
         *bufferSize = 0;
-        LOGE("frame null !!!");
+        LOGE("audio frame null !!!");
         return;
     }
 
     audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
     wanted_nb_samples = synchronize_audio(frame->nb_samples);
+    if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
+        if (swr_set_compensation(swr_context, (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
+                                              frame->sample_rate,
+                                 wanted_nb_samples * audio_dec_ctx->sample_rate / frame->sample_rate) < 0) {
+            LOGE("swr_set_compensation() failed");
+            *bufferSize = 0;
+            return;
+        }
+    }
     ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
                       (const uint8_t **) frame->data, frame->nb_samples);
     av_frame_free(&frame);
@@ -328,34 +330,52 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
 }
 
 void *videoProcess(void *arg) {
-//    while (thread_flag) {
-//
-//        int ret = 0;
-//        AVFrame *frame = NULL;
-//
-//        pthread_mutex_lock(&c_mutex);
-//        if (!video_list.empty()) {
-//            frame = video_list.front();
-//            video_list.pop_front();
-//            pthread_cond_signal(&c_cond);
-//        }
-//        if (video_list.empty()) {
-//            pthread_cond_wait(&v_cond, &c_mutex);
-//            if (!video_list.empty()) {
-//                frame = video_list.front();
-//                video_list.pop_front();
-//            }
-//        }
-//        pthread_mutex_unlock(&c_mutex);
-//
-//        if (frame == NULL) {
-//            LOGE("frame null !!!");
-//            continue;
-//        }
-//        LOGI("video show");
-//        av_usleep(10000); // us
-//        av_frame_free(&frame);
-//    }
+    AVFrame *frame = av_frame_alloc();
+    int ret = 0;
+    AVPacket *avPacket = NULL;
+    while (thread_flag) {
+        avPacket = NULL;
+        pthread_mutex_lock(&c_mutex);
+        if (!video_pkt_list.empty()) {
+            avPacket = video_pkt_list.front();
+            video_pkt_list.pop_front();
+            if (video_pkt_list.size() <= 2 && video_pkt_list.size() > 0) {
+                pthread_cond_signal(&c_cond);
+            }
+        } else {
+            pthread_cond_signal(&c_cond);
+            pthread_cond_wait(&v_cond, &c_mutex);
+            if (!video_pkt_list.empty()) {
+                avPacket = video_pkt_list.front();
+                video_pkt_list.pop_front();
+            }
+        }
+        pthread_mutex_unlock(&c_mutex);
+
+        if (avPacket == NULL) {
+            continue;
+        }
+
+        // 解码
+        ret = avcodec_send_packet(video_dec_ctx, avPacket);
+        if (ret < 0) {
+            LOGE("Error video sending a packet for decoding");
+            continue;
+        }
+        while (ret >= 0) {
+            ret = avcodec_receive_frame(video_dec_ctx, frame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                continue;
+            } else if (ret < 0) {
+                LOGE("Error video during decoding");
+                continue;
+            }
+            LOGI("video show->");
+            av_usleep(5000); // us
+        }
+        av_packet_free(&avPacket);
+    }
+    av_frame_free(&frame);
     return 0;
 }
 
@@ -373,12 +393,7 @@ void testPlayer(const char *src_filename) {
     int ret = 0;
     AVPacket pkt;
     int out_sample_rate = 0;
-    SLConfigure slConfigure = {
-            0,
-            1,
-            0,
-            NULL
-    };
+    SLConfigure slConfigure = {0};
 
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
@@ -447,7 +462,7 @@ void testPlayer(const char *src_filename) {
             LOGI("swr_init success");
         }
     }
-    //
+    //av_packet_ref
 //    init_clock(&videoState.audclk);
     //
     av_init_packet(&pkt);
@@ -459,14 +474,12 @@ void testPlayer(const char *src_filename) {
 
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
-        AVPacket orig_pkt = pkt;
         decode_packet(&pkt, false);
-        av_packet_unref(&orig_pkt);
     }
     /* flush cached frames */
 //    avcodec_flush_buffers(audio_dec_ctx);
-    FLOGI("flush cached frames.");
-    decode_packet(&pkt, true);
+//    FLOGI("flush cached frames.");
+//    decode_packet(&pkt, true);
     FLOGI("Demuxing succeeded.");
     if (audio_stream) {
         delete[](out_buffer);
