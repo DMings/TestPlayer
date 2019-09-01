@@ -15,8 +15,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val srcPath = File(Environment.getExternalStorageDirectory(), "1/video2.mp4").path
-//        val srcPath = File(Environment.getExternalStorageDirectory(), "1/animation.mp4").path
+//        val srcPath = File(Environment.getExternalStorageDirectory(), "1/video2.mp4").path
+        val srcPath = File(Environment.getExternalStorageDirectory(), "1/animation.mp4").path
         Log.i("DMFF", "srcPath: $srcPath")
         btn_test.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

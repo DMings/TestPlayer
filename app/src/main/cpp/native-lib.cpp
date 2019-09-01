@@ -190,25 +190,25 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
         pkt->size = 0;
     }
     if (pkt->stream_index == video_stream_idx) {
-        double t = av_gettime_relative();
-        AVPacket *copy_pkg = av_packet_clone(pkt);
-        if (copy_pkg != NULL) {
-            pthread_mutex_lock(&c_mutex);
-            if (video_pkt_list.size() > 3) {
-                // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
-                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
-                if (video_pkt_list.size() > 5) {
-                    LOGE("pthread_cond_wait video_pkt_list %d", video_pkt_list.size());
-                }
-                video_pkt_list.push_back(copy_pkg);
-                pthread_cond_signal(&v_cond); // 假如消费过快，就需要通知，有数据到了
-            } else {
-                video_pkt_list.push_back(copy_pkg);
-                pthread_cond_signal(&v_cond);
-            }
-            pthread_mutex_unlock(&c_mutex);
-        }
-        LOGE("video cost time: %f",(av_gettime_relative() - t) / 1000);
+//        double t = av_gettime_relative();
+//        AVPacket *copy_pkg = av_packet_clone(pkt);
+//        if (copy_pkg != NULL) {
+//            pthread_mutex_lock(&c_mutex);
+//            if (video_pkt_list.size() > 3) {
+//                // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
+//                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+//                if (video_pkt_list.size() > 5) {
+//                    LOGE("pthread_cond_wait video_pkt_list %d", video_pkt_list.size());
+//                }
+//                video_pkt_list.push_back(copy_pkg);
+//                pthread_cond_signal(&v_cond); // 假如消费过快，就需要通知，有数据到了
+//            } else {
+//                video_pkt_list.push_back(copy_pkg);
+//                pthread_cond_signal(&v_cond);
+//            }
+//            pthread_mutex_unlock(&c_mutex);
+//        }
+//        LOGE("video cost time: %f",(av_gettime_relative() - t) / 1000);
     } else if (pkt->stream_index == audio_stream_idx) {
         double t = av_gettime_relative();
         // 解码
@@ -221,6 +221,7 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
             AVFrame *frame = av_frame_alloc();
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
                 av_frame_free(&frame);
                 return;
             } else if (ret < 0) {
@@ -236,26 +237,26 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
                 if (audio_frame_list.size() > 5) {
                     LOGE("pthread_cond_wait audio_frame_list %d", audio_frame_list.size());
                 }
-                int nb_samples_count = 0;
-                for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
-                     iterator != audio_frame_list.end(); ++iterator) {
-                    nb_samples_count += (*iterator)->nb_samples;
-                }
-                if (nb_samples_count > audio_dec_ctx->sample_rate * 1.5) { // 音频已经累积了1.5秒的数据，有点多了,低概率
-                    LOGE("nb_samples_count: %d,sample_rate: %d", nb_samples_count, audio_dec_ctx->sample_rate);
-                    // 这里采用丢弃一半的策略，丢弃偶数索引；
-                    int i = 0;
-                    for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
-                         iterator != audio_frame_list.end();) {
-                        i++;
-                        if (i % 2 == 0) {
-                            iterator = audio_frame_list.erase(iterator);
-                            av_frame_free(&(*iterator));
-                        } else {
-                            iterator++;
-                        }
-                    }
-                }
+//                int nb_samples_count = 0;
+//                for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
+//                     iterator != audio_frame_list.end(); ++iterator) {
+//                    nb_samples_count += (*iterator)->nb_samples;
+//                }
+//                if (nb_samples_count > audio_dec_ctx->sample_rate * 1.5) { // 音频已经累积了1.5秒的数据，有点多了,低概率
+//                    LOGE("nb_samples_count: %d,sample_rate: %d", nb_samples_count, audio_dec_ctx->sample_rate);
+//                    // 这里采用丢弃一半的策略，丢弃偶数索引；
+//                    int i = 0;
+//                    for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
+//                         iterator != audio_frame_list.end();) {
+//                        i++;
+//                        if (i % 2 == 0) {
+//                            iterator = audio_frame_list.erase(iterator);
+//                            av_frame_free(&(*iterator));
+//                        } else {
+//                            iterator++;
+//                        }
+//                    }
+//                }
                 audio_frame_list.push_back(frame);
                 pthread_cond_signal(&a_cond); // 假如消费过快，就需要通知，有数据到了
             } else {
@@ -276,9 +277,9 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
     if (!audio_frame_list.empty()) {
         frame = audio_frame_list.front();
         audio_frame_list.pop_front();
-        if (audio_frame_list.size() <= 2 && audio_frame_list.size() > 0) {
+//        if (audio_frame_list.size() <= 2 && audio_frame_list.size() > 0) {
             pthread_cond_signal(&c_cond);
-        }
+//        }
     }
     if (audio_frame_list.empty()) {
         pthread_cond_signal(&c_cond);
@@ -299,7 +300,8 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
     }
 
     audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
-    wanted_nb_samples = synchronize_audio(frame->nb_samples);
+    wanted_nb_samples = frame->nb_samples;
+//    wanted_nb_samples = synchronize_audio(frame->nb_samples);
     if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
         if (swr_set_compensation(swr_context, (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
                                               frame->sample_rate,
@@ -326,7 +328,6 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
         *bufferSize = 0;
         LOGE("swr_convert err = %d", ret);
     }
-    return;
 }
 
 void *videoProcess(void *arg) {
