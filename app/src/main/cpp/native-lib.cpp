@@ -377,7 +377,8 @@ void *audioProcess(void *arg) {
             }
             // 到这里必须要有sl数据
             audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
-            wanted_nb_samples = synchronize_audio(frame->nb_samples);
+            wanted_nb_samples = frame->nb_samples;
+//            wanted_nb_samples = synchronize_audio(frame->nb_samples);
             if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
                 if (swr_set_compensation(swr_context,
                                          (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
