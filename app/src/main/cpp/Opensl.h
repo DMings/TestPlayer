@@ -8,13 +8,14 @@
 #include <SLES/OpenSLES_Android.h>
 #include "log.h"
 
-typedef void (*SlBufferCallback)(uint8_t **buffer, uint32_t *bufferSize);
+typedef void (*signSlBufferCallback)();
+//typedef void (*SlBufferCallback)(uint8_t **buffer, uint32_t *bufferSize);
 
 typedef struct SLConfigure {
     int sampleRate;
     int channels;
     int64_t fmt;
-    SlBufferCallback slBufferCallback;
+    signSlBufferCallback signSlBufferCallback;
 };
 
 class Opensl {
@@ -30,6 +31,8 @@ public:
     SLConfigure *slConfigure;
 
     int createPlayer(SLConfigure *sLConfigure);
+
+    void setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize);
 
     void play();
 

@@ -9,20 +9,34 @@
 
 //第一次主动调用在调用线程
 //之后在新线程中回调
+//static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
+////    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
+//    Opensl *opensl = (Opensl *) context;
+//    uint8_t *buffer;
+//    SLuint32 bufferSize;
+//
+//    opensl->slConfigure->slBufferCallback(&buffer, &bufferSize);
+//    if (bufferSize > 0) {
+//        SLresult result = (*bq)->Enqueue(bq, buffer, bufferSize);
+////        LOGI("  bqPlayerCallback :%d size:%d", result, bufferSize);
+//    } else {
+//        uint8_t b[] = {0};
+//        SLresult result = (*bq)->Enqueue(bq, b, 1);
+////        LOGE("  decodeAudio error bqPlayerCallback :%d", result);
+//    }
+//}
 static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
-    Opensl *opensl = (Opensl *) context;
-    uint8_t *buffer;
-    SLuint32 bufferSize;
+    ((Opensl *) context)->slConfigure->signSlBufferCallback();
+}
 
-    opensl->slConfigure->slBufferCallback(&buffer, &bufferSize);
-    if (bufferSize > 0) {
-        SLresult result = (*bq)->Enqueue(bq, buffer, bufferSize);
-//        LOGI("  bqPlayerCallback :%d size:%d", result, bufferSize);
-    } else {
-        uint8_t b[] = {0};
-        SLresult result = (*bq)->Enqueue(bq, b, 1);
-//        LOGE("  decodeAudio error bqPlayerCallback :%d", result);
+void Opensl::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize){
+    if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
+        SLuint32 pState;
+        (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);
+        if(pState == SL_PLAYSTATE_PLAYING){
+            (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, buffer, bufferSize);
+        }
     }
 }
 

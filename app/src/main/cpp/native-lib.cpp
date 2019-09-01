@@ -49,17 +49,16 @@ static struct SwrContext *swr_context;
 static uint8_t *out_buffer;
 static int wanted_nb_samples;
 static pthread_mutex_t c_mutex;
-static pthread_cond_t c_cond;
+static pthread_cond_t ac_cond;
+static pthread_cond_t vc_cond;
 static pthread_cond_t a_cond;
-static pthread_cond_t v_cond;
-//static std::queue<AVFrame *> audio_queue;
-static pthread_t p_tid;
+static bool mustFeed = false;
+static pthread_t p_a_tid;
+static pthread_t p_v_tid;
 static bool thread_flag = true;
 static Clock vidclk;
 static Clock audclk;
 static Clock extclk;
-static std::list<AVFrame *> audio_frame_list;
-//static std::list<AVFrame *> video_frame_list;
 
 static std::list<AVPacket *> audio_pkt_list;
 static std::list<AVPacket *> video_pkt_list;
@@ -154,34 +153,10 @@ static int synchronize_audio(int nb_samples) {
         wanted_nb_samples = nb_samples;
     }
     LOGI("diff_ms: %f wanted_nb_samples: %d", diff_ms, wanted_nb_samples);
-//        if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD) {
-//            is->audio_diff_cum = diff + is->audio_diff_avg_coef * is->audio_diff_cum;
-//            if (is->audio_diff_avg_count < AUDIO_DIFF_AVG_NB) {
-//                /* not enough measures to have a correct estimate */
-//                is->audio_diff_avg_count++;
-//            } else {
-//                /* estimate the A-V difference */
-//                avg_diff = is->audio_diff_cum * (1.0 - is->audio_diff_avg_coef);
-//
-//                if (fabs(avg_diff) >= is->audio_diff_threshold) {
-//                    wanted_nb_samples = nb_samples + (int) (diff * is->freq);
-//                    min_nb_samples = ((nb_samples * (100 - SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-//                    max_nb_samples = ((nb_samples * (100 + SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-//                    wanted_nb_samples = av_clip(wanted_nb_samples, min_nb_samples, max_nb_samples);
-//                }
-//                LOGI("diff=%f adiff=%f sample_diff=%d apts=%0.3f %f",
-//                     diff, avg_diff, wanted_nb_samples - nb_samples,
-//                     is->audio_clock, is->audio_diff_threshold);
-//            }
-//        } else {
-//            /* too big difference : may be initial PTS errors, so
-//               reset A-V filter */
-//            is->audio_diff_avg_count = 0;
-//            is->audio_diff_cum = 0;
-//        }
     return wanted_nb_samples;
 }
 
+AVFrame *frame = av_frame_alloc();
 
 static void decode_packet(AVPacket *pkt, bool clear_cache) {
     int ret = 0;
@@ -190,143 +165,111 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
         pkt->size = 0;
     }
     if (pkt->stream_index == video_stream_idx) {
+//        double t = av_gettime_relative();
+//        AVPacket *copy_pkg = av_packet_clone(pkt);
+//        if (copy_pkg != NULL) {
+//            pthread_mutex_lock(&c_mutex);
+////            if (video_pkt_list.size() >= 2) {
+////                // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
+////                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+////                if (video_pkt_list.size() > 4) {
+//                    LOGE("video_pkt_list %d", video_pkt_list.size());
+////                }
+////                video_pkt_list.push_back(copy_pkg);
+////                pthread_cond_signal(&c_cond); // 假如消费过快，就需要通知，有数据到了
+////            } else {
+//                video_pkt_list.push_back(copy_pkg);
+//                pthread_cond_signal(&vc_cond);
+////            }
+//            pthread_mutex_unlock(&c_mutex);
+//        }
+//        LOGE("video cost time: %f", (av_gettime_relative() - t) / 1000);
+    } else if (pkt->stream_index == audio_stream_idx) {
         double t = av_gettime_relative();
+//        AVPacket *copy_pkg = pkt;
+//        // 解码
+//        ret = avcodec_send_packet(audio_dec_ctx, pkt);
+//        if (ret < 0) {
+//            LOGE("Error audio sending a packet for decoding");
+////            av_frame_free(&frame);
+//            return ;
+//        }
+//        while (ret >= 0) {
+//            ret = avcodec_receive_frame(audio_dec_ctx, frame);
+//            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+//                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF %d",ret);
+////                av_frame_free(&frame);
+//                return ;
+//            } else if (ret < 0) {
+//                LOGE("Error audio during decoding");
+////                av_frame_free(&frame);
+//                return ;
+//            }
+//            LOGI("avcodec_receive_frame");
+//
+//            bool isFeed;
+//            pthread_mutex_lock(&c_mutex);
+//            isFeed = mustFeed;
+//            mustFeed = false;
+//            pthread_mutex_unlock(&c_mutex);
+//            LOGE("mustFeed %d",isFeed);
+//            if (!isFeed) {
+//                pthread_mutex_lock(&c_mutex);
+//                pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
+//                pthread_mutex_unlock(&c_mutex);
+//            }
+//            // 到这里必须要有sl数据
+//            audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
+//            wanted_nb_samples = synchronize_audio(frame->nb_samples);
+//            if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
+//                if (swr_set_compensation(swr_context,
+//                                         (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
+//                                         frame->sample_rate,
+//                                         wanted_nb_samples * audio_dec_ctx->sample_rate / frame->sample_rate) < 0) {
+//                    LOGE("swr_set_compensation() failed");
+//                    continue;
+//                }
+//            }
+//            ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
+//                              (const uint8_t **) frame->data, frame->nb_samples);
+//            if (ret >= 0) {
+//                opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
+//                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
+//            } else {
+//                LOGE("swr_convert err = %d", ret);
+//            }
+////        }
+////        av_packet_free(&avPacket);
+//        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
+//        }
+
         AVPacket *copy_pkg = av_packet_clone(pkt);
         if (copy_pkg != NULL) {
             pthread_mutex_lock(&c_mutex);
-            if (video_pkt_list.size() > 3) {
+            if (audio_pkt_list.size() >= 2) {
                 // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
-                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
-                if (video_pkt_list.size() > 5) {
-                    LOGE("pthread_cond_wait video_pkt_list %d", video_pkt_list.size());
+                pthread_cond_wait(&ac_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
+                if (audio_pkt_list.size() > 4) {
+                    LOGE("pthread_cond_wait audio_pkt_list %d", audio_pkt_list.size());
                 }
-                video_pkt_list.push_back(copy_pkg);
-                pthread_cond_signal(&v_cond); // 假如消费过快，就需要通知，有数据到了
+                audio_pkt_list.push_back(copy_pkg);
+                pthread_cond_signal(&ac_cond); // 假如消费过快，就需要通知，有数据到了
             } else {
-                video_pkt_list.push_back(copy_pkg);
-                pthread_cond_signal(&v_cond);
+                audio_pkt_list.push_back(copy_pkg);
+                pthread_cond_signal(&ac_cond);
             }
             pthread_mutex_unlock(&c_mutex);
         }
-        LOGE("video cost time: %f",(av_gettime_relative() - t) / 1000);
-    } else if (pkt->stream_index == audio_stream_idx) {
-        double t = av_gettime_relative();
-        // 解码
-        ret = avcodec_send_packet(audio_dec_ctx, pkt);
-        if (ret < 0) {
-            LOGE("Error audio sending a packet for decoding");
-            return;
-        }
-        while (ret >= 0) {
-            AVFrame *frame = av_frame_alloc();
-            ret = avcodec_receive_frame(audio_dec_ctx, frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                av_frame_free(&frame);
-                return;
-            } else if (ret < 0) {
-                LOGE("Error audio during decoding");
-                av_frame_free(&frame);
-                return;
-            }
-            LOGE("check audio_frame_list %d", audio_frame_list.size());
-            pthread_mutex_lock(&c_mutex);
-            if (audio_frame_list.size() > 3) {
-                // 就算视频消耗过快，也会被音频卡住，这里音频实际上不是太多
-                pthread_cond_wait(&c_cond, &c_mutex); // 如果是视频解开的，实际上音频还有数据，这里就要处理一下，避免数据过多
-                if (audio_frame_list.size() > 5) {
-                    LOGE("pthread_cond_wait audio_frame_list %d", audio_frame_list.size());
-                }
-                int nb_samples_count = 0;
-                for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
-                     iterator != audio_frame_list.end(); ++iterator) {
-                    nb_samples_count += (*iterator)->nb_samples;
-                }
-                if (nb_samples_count > audio_dec_ctx->sample_rate * 1.5) { // 音频已经累积了1.5秒的数据，有点多了,低概率
-                    LOGE("nb_samples_count: %d,sample_rate: %d", nb_samples_count, audio_dec_ctx->sample_rate);
-                    // 这里采用丢弃一半的策略，丢弃偶数索引；
-                    int i = 0;
-                    for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
-                         iterator != audio_frame_list.end();) {
-                        i++;
-                        if (i % 2 == 0) {
-                            iterator = audio_frame_list.erase(iterator);
-                            av_frame_free(&(*iterator));
-                        } else {
-                            iterator++;
-                        }
-                    }
-                }
-                audio_frame_list.push_back(frame);
-                pthread_cond_signal(&a_cond); // 假如消费过快，就需要通知，有数据到了
-            } else {
-                audio_frame_list.push_back(frame);
-                pthread_cond_signal(&a_cond);
-            }
-            pthread_mutex_unlock(&c_mutex);
-        }
-        LOGE("audio cost time: %f",(av_gettime_relative() - t) / 1000);
+        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
     }
 }
 
-static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
-    int ret = 0;
-    AVFrame *frame = NULL;
-
+static void slBufferCallback() {
     pthread_mutex_lock(&c_mutex);
-    if (!audio_frame_list.empty()) {
-        frame = audio_frame_list.front();
-        audio_frame_list.pop_front();
-        if (audio_frame_list.size() <= 2 && audio_frame_list.size() > 0) {
-            pthread_cond_signal(&c_cond);
-        }
-    }
-    if (audio_frame_list.empty()) {
-        pthread_cond_signal(&c_cond);
-        pthread_cond_wait(&a_cond, &c_mutex);
-        if (!audio_frame_list.empty()) {
-            frame = audio_frame_list.front();
-            audio_frame_list.pop_front();
-        }
-    }
+    mustFeed = true;
+    pthread_cond_signal(&a_cond);
+    LOGI("slBufferCallback mustFeed")
     pthread_mutex_unlock(&c_mutex);
-
-    LOGE("sl check audio_frame_list %d", audio_frame_list.size());
-
-    if (frame == NULL) {
-        *bufferSize = 0;
-        LOGE("audio frame null !!!");
-        return;
-    }
-
-    audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
-    wanted_nb_samples = synchronize_audio(frame->nb_samples);
-    if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
-        if (swr_set_compensation(swr_context, (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
-                                              frame->sample_rate,
-                                 wanted_nb_samples * audio_dec_ctx->sample_rate / frame->sample_rate) < 0) {
-            LOGE("swr_set_compensation() failed");
-            *bufferSize = 0;
-            return;
-        }
-    }
-    ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
-                      (const uint8_t **) frame->data, frame->nb_samples);
-    av_frame_free(&frame);
-//            if (cache) {
-//                int fifo_size = swr_get_out_samples(swr_context, 0);
-//                if (fifo_size >= frame->nb_samples) {
-//                    res = swr_convert(swr_context, frame->data, wanted_nb_samples, NULL, 0);
-//                }
-//            }
-    if (ret >= 0) {
-        *bufferSize = (uint32_t) ret * 4;
-        *buffer = out_buffer;
-//        LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
-    } else {
-        *bufferSize = 0;
-        LOGE("swr_convert err = %d", ret);
-    }
-    return;
 }
 
 void *videoProcess(void *arg) {
@@ -339,12 +282,12 @@ void *videoProcess(void *arg) {
         if (!video_pkt_list.empty()) {
             avPacket = video_pkt_list.front();
             video_pkt_list.pop_front();
-            if (video_pkt_list.size() <= 2 && video_pkt_list.size() > 0) {
-                pthread_cond_signal(&c_cond);
-            }
+//            if (video_pkt_list.size() <= 2 && !video_pkt_list.empty()) {
+//                pthread_cond_signal(&c_cond);
+//            }
         } else {
-            pthread_cond_signal(&c_cond);
-            pthread_cond_wait(&v_cond, &c_mutex);
+//            pthread_cond_signal(&c_cond);
+            pthread_cond_wait(&vc_cond, &c_mutex);
             if (!video_pkt_list.empty()) {
                 avPacket = video_pkt_list.front();
                 video_pkt_list.pop_front();
@@ -374,6 +317,87 @@ void *videoProcess(void *arg) {
             av_usleep(5000); // us
         }
         av_packet_free(&avPacket);
+    }
+    av_frame_free(&frame);
+    return 0;
+}
+
+void *audioProcess(void *arg) {
+    int ret = 0;
+    AVPacket *avPacket = NULL;
+    AVFrame *frame = av_frame_alloc();
+    while (thread_flag) {
+        avPacket = NULL;
+        pthread_mutex_lock(&c_mutex);
+        if (!audio_pkt_list.empty()) {
+            avPacket = audio_pkt_list.front();
+            audio_pkt_list.pop_front();
+            pthread_cond_signal(&ac_cond);
+        } else {
+            pthread_cond_signal(&ac_cond);
+            pthread_cond_wait(&ac_cond, &c_mutex);
+            if (!audio_pkt_list.empty()) {
+                avPacket = audio_pkt_list.front();
+                audio_pkt_list.pop_front();
+            }
+        }
+        pthread_mutex_unlock(&c_mutex);
+
+        if (avPacket == NULL) {
+            continue;
+        }
+        double t = av_gettime_relative();
+        // 解码
+        ret = avcodec_send_packet(audio_dec_ctx, avPacket);
+        if (ret < 0) {
+            LOGE("Error audio sending a packet for decoding");
+            av_frame_free(&frame);
+            return NULL;
+        }
+        while (ret >= 0) {
+            ret = avcodec_receive_frame(audio_dec_ctx, frame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
+                break;
+            } else if (ret < 0) {
+                LOGE("Error audio during decoding");
+                av_frame_free(&frame);
+                return NULL;
+            }
+            bool isFeed;
+            pthread_mutex_lock(&c_mutex);
+            isFeed = mustFeed;
+            mustFeed = false;
+            pthread_mutex_unlock(&c_mutex);
+            LOGE("mustFeed %d",isFeed);
+            if (!isFeed) {
+                pthread_mutex_lock(&c_mutex);
+                pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
+                pthread_mutex_unlock(&c_mutex);
+            }
+            // 到这里必须要有sl数据
+            audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
+            wanted_nb_samples = synchronize_audio(frame->nb_samples);
+            if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
+                if (swr_set_compensation(swr_context,
+                                         (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
+                                         frame->sample_rate,
+                                         wanted_nb_samples * audio_dec_ctx->sample_rate / frame->sample_rate) < 0) {
+                    LOGE("swr_set_compensation() failed");
+                    continue;
+                }
+            }
+            ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
+                              (const uint8_t **) frame->data, frame->nb_samples);
+            if (ret >= 0) {
+                opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
+                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
+            } else {
+                LOGE("swr_convert err = %d", ret);
+            }
+        }
+        av_packet_free(&avPacket);
+        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
     }
     av_frame_free(&frame);
     return 0;
@@ -436,7 +460,8 @@ void testPlayer(const char *src_filename) {
 
     pthread_mutex_init(&c_mutex, NULL);
     pthread_cond_init(&a_cond, NULL);
-    pthread_cond_init(&v_cond, NULL);
+    pthread_cond_init(&vc_cond, NULL);
+    pthread_cond_init(&ac_cond, NULL);
 
     if (audio_stream) {
         out_sample_rate = audio_dec_ctx->sample_rate;
@@ -448,7 +473,7 @@ void testPlayer(const char *src_filename) {
         LOGI("out_sample_rate: %d s: %d", out_sample_rate, s);
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
-        slConfigure.slBufferCallback = slBufferCallback;
+        slConfigure.signSlBufferCallback = slBufferCallback;
         opensl.createPlayer(&slConfigure);
         swr_context = swr_alloc();
         swr_alloc_set_opts(swr_context,
@@ -470,7 +495,8 @@ void testPlayer(const char *src_filename) {
     pkt.size = 0;
 
     opensl.play();
-    pthread_create(&p_tid, 0, videoProcess, 0);
+    pthread_create(&p_a_tid, 0, audioProcess, 0);
+    pthread_create(&p_v_tid, 0, videoProcess, 0);
 
     /* read frames from the file */
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
@@ -493,10 +519,12 @@ void testPlayer(const char *src_filename) {
     opensl.pause();
     opensl.release();
     pthread_cond_destroy(&a_cond);
-    pthread_cond_destroy(&v_cond);
+    pthread_cond_destroy(&vc_cond);
+    pthread_cond_destroy(&ac_cond);
     pthread_mutex_destroy(&c_mutex);
     thread_flag = false;
-    pthread_join(p_tid, 0);
+    pthread_join(p_a_tid, 0);
+    pthread_join(p_v_tid, 0);
 }
 
 
@@ -510,3 +538,35 @@ Java_com_dming_testplayer_MainActivity_testFF(
     env->ReleaseStringUTFChars(path_, path);
 
 }
+
+
+//                if (audio_frame_list.size() > 5) {
+//                    LOGE("pthread_cond_wait audio_frame_list %d", audio_frame_list.size());
+//                }
+//                int nb_samples_count = 0;
+//                for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
+//                     iterator != audio_frame_list.end(); ++iterator) {
+//                    nb_samples_count += (*iterator)->nb_samples;
+//                }
+//                if (nb_samples_count > audio_dec_ctx->sample_rate * 1.5) { // 音频已经累积了1.5秒的数据，有点多了,低概率
+//                    LOGE("nb_samples_count: %d,sample_rate: %d", nb_samples_count, audio_dec_ctx->sample_rate);
+//                    // 这里采用丢弃一半的策略，丢弃偶数索引；
+//                    int i = 0;
+//                    for (std::list<AVFrame *>::iterator iterator = audio_frame_list.begin();
+//                         iterator != audio_frame_list.end();) {
+//                        i++;
+//                        if (i % 2 == 0) {
+//                            iterator = audio_frame_list.erase(iterator);
+//                            av_frame_free(&(*iterator));
+//                        } else {
+//                            iterator++;
+//                        }
+//                    }
+//                }
+
+//            if (cache) {
+//                int fifo_size = swr_get_out_samples(swr_context, 0);
+//                if (fifo_size >= frame->nb_samples) {
+//                    res = swr_convert(swr_context, frame->data, wanted_nb_samples, NULL, 0);
+//                }
+//            }
