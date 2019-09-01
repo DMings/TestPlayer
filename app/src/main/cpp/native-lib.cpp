@@ -152,11 +152,12 @@ static int synchronize_audio(int nb_samples) {
     } else {
         wanted_nb_samples = nb_samples;
     }
+//    wanted_nb_samples = ((wanted_nb_samples & 1) == 0) ? wanted_nb_samples : (wanted_nb_samples + 1);
     LOGI("diff_ms: %f wanted_nb_samples: %d", diff_ms, wanted_nb_samples);
     return wanted_nb_samples;
 }
 
-AVFrame *frame = av_frame_alloc();
+//AVFrame *frame = av_frame_alloc();
 
 static void decode_packet(AVPacket *pkt, bool clear_cache) {
     int ret = 0;
@@ -186,63 +187,6 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
 //        LOGE("video cost time: %f", (av_gettime_relative() - t) / 1000);
     } else if (pkt->stream_index == audio_stream_idx) {
         double t = av_gettime_relative();
-//        AVPacket *copy_pkg = pkt;
-//        // 解码
-//        ret = avcodec_send_packet(audio_dec_ctx, pkt);
-//        if (ret < 0) {
-//            LOGE("Error audio sending a packet for decoding");
-////            av_frame_free(&frame);
-//            return ;
-//        }
-//        while (ret >= 0) {
-//            ret = avcodec_receive_frame(audio_dec_ctx, frame);
-//            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-//                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF %d",ret);
-////                av_frame_free(&frame);
-//                return ;
-//            } else if (ret < 0) {
-//                LOGE("Error audio during decoding");
-////                av_frame_free(&frame);
-//                return ;
-//            }
-//            LOGI("avcodec_receive_frame");
-//
-//            bool isFeed;
-//            pthread_mutex_lock(&c_mutex);
-//            isFeed = mustFeed;
-//            mustFeed = false;
-//            pthread_mutex_unlock(&c_mutex);
-//            LOGE("mustFeed %d",isFeed);
-//            if (!isFeed) {
-//                pthread_mutex_lock(&c_mutex);
-//                pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
-//                pthread_mutex_unlock(&c_mutex);
-//            }
-//            // 到这里必须要有sl数据
-//            audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
-//            wanted_nb_samples = synchronize_audio(frame->nb_samples);
-//            if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
-//                if (swr_set_compensation(swr_context,
-//                                         (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
-//                                         frame->sample_rate,
-//                                         wanted_nb_samples * audio_dec_ctx->sample_rate / frame->sample_rate) < 0) {
-//                    LOGE("swr_set_compensation() failed");
-//                    continue;
-//                }
-//            }
-//            ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
-//                              (const uint8_t **) frame->data, frame->nb_samples);
-//            if (ret >= 0) {
-//                opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
-//                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
-//            } else {
-//                LOGE("swr_convert err = %d", ret);
-//            }
-////        }
-////        av_packet_free(&avPacket);
-//        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
-//        }
-
         AVPacket *copy_pkg = av_packet_clone(pkt);
         if (copy_pkg != NULL) {
             pthread_mutex_lock(&c_mutex);
@@ -260,7 +204,7 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
             }
             pthread_mutex_unlock(&c_mutex);
         }
-        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
+//        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
     }
 }
 
@@ -268,7 +212,7 @@ static void slBufferCallback() {
     pthread_mutex_lock(&c_mutex);
     mustFeed = true;
     pthread_cond_signal(&a_cond);
-    LOGI("slBufferCallback mustFeed")
+//    LOGI("slBufferCallback mustFeed")
     pthread_mutex_unlock(&c_mutex);
 }
 
@@ -346,7 +290,6 @@ void *audioProcess(void *arg) {
         if (avPacket == NULL) {
             continue;
         }
-        double t = av_gettime_relative();
         // 解码
         ret = avcodec_send_packet(audio_dec_ctx, avPacket);
         if (ret < 0) {
@@ -357,24 +300,21 @@ void *audioProcess(void *arg) {
         while (ret >= 0) {
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
+//                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
                 break;
             } else if (ret < 0) {
                 LOGE("Error audio during decoding");
                 av_frame_free(&frame);
                 return NULL;
             }
-            bool isFeed;
             pthread_mutex_lock(&c_mutex);
-            isFeed = mustFeed;
+            if (!mustFeed) {
+                pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
+            }
+//            LOGE("mustFeed %d",mustFeed);
             mustFeed = false;
             pthread_mutex_unlock(&c_mutex);
-            LOGE("mustFeed %d",isFeed);
-            if (!isFeed) {
-                pthread_mutex_lock(&c_mutex);
-                pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
-                pthread_mutex_unlock(&c_mutex);
-            }
+
             // 到这里必须要有sl数据
             audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
             wanted_nb_samples = frame->nb_samples;
@@ -398,7 +338,6 @@ void *audioProcess(void *arg) {
             }
         }
         av_packet_free(&avPacket);
-        LOGE("audio cost time: %f", (av_gettime_relative() - t) / 1000);
     }
     av_frame_free(&frame);
     return 0;
