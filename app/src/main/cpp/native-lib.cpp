@@ -269,6 +269,8 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
     }
 }
 
+static bool test = false;
+
 static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
     int ret = 0;
     AVFrame *frame = NULL;
@@ -301,8 +303,15 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
 
     audclk.pts = av_q2d(audio_dec_ctx->time_base) * frame->pts * 1000.0; // ms
     wanted_nb_samples = frame->nb_samples;
+    if(!test){
+        test = true;
+        wanted_nb_samples = 1024;
+    }else {
+        test = false;
+        wanted_nb_samples = 900;
+    }
 //    wanted_nb_samples = synchronize_audio(frame->nb_samples);
-    if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
+//    if (wanted_nb_samples != frame->nb_samples) {  // 没有这个，输入通道数量不会变
         if (swr_set_compensation(swr_context, (wanted_nb_samples - frame->nb_samples) * audio_dec_ctx->sample_rate /
                                               frame->sample_rate,
                                  wanted_nb_samples * audio_dec_ctx->sample_rate / frame->sample_rate) < 0) {
@@ -310,7 +319,7 @@ static void slBufferCallback(uint8_t **buffer, uint32_t *bufferSize) {
             *bufferSize = 0;
             return;
         }
-    }
+//    }
     ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
                       (const uint8_t **) frame->data, frame->nb_samples);
     av_frame_free(&frame);
