@@ -170,8 +170,9 @@ void Opensl::play() {
     if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
-        uint8_t b[] = {0};
-        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, b, 1);
+        this->slConfigure->signSlBufferCallback();
+//        uint8_t b[] = {0};
+//        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, b, 1);
 //        slBufferCallback(bqPlayerBufferQueue, this);
     }
 }
