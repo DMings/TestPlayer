@@ -4,6 +4,8 @@
 #include "Opensl.h"
 #include <list>
 #include <pthread.h>
+#include <GLES2/gl2.h>
+//#include <EGL/egl.h>
 
 extern "C" {
 #include <libavutil/log.h>
@@ -45,7 +47,9 @@ static int width, height;
 static enum AVPixelFormat pix_fmt;
 static Opensl opensl;
 static struct SwrContext *swr_context;
+static struct SwsContext *sws_context;
 static uint8_t *out_buffer;
+static uint8_t *video_out_buffer;
 static int wanted_nb_samples;
 static pthread_mutex_t c_mutex;
 static pthread_cond_t ac_cond;
@@ -62,9 +66,16 @@ static Clock extclk;
 static std::list<AVPacket *> audio_pkt_list;
 static std::list<AVPacket *> video_pkt_list;
 
+static JavaVM *jvm;
+static jobject initObject;
+static jmethodID initMethod;
+static jobject updateObject;
+static jmethodID updateMethod;
+
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
                               enum AVMediaType type) {
+//    eglGetCurrentContext();
     int ret, stream_index;
     AVCodec *dec = NULL;
     AVDictionary *opts = NULL;
@@ -248,14 +259,35 @@ static uint synchronize_video(double pkt_duration) { // us
     } else { // 视频超过时间
         wanted_delay = diff_ms;
     }
-    LOGI("diff_ms: %f wanted_delay: %f", diff_ms, wanted_delay);
-    return (uint)wanted_delay;
+    LOGI("video diff_ms: %f wanted_delay: %f", diff_ms, wanted_delay);
+    return (uint) wanted_delay;
+}
+
+static GLuint createTexture() {
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameterf(GL_TEXTURE_2D,
+            GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameterf(GL_TEXTURE_2D,
+            GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D,
+            GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameterf(GL_TEXTURE_2D,
+            GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return tex;
 }
 
 void *videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
     AVPacket *avPacket = NULL;
+    JNIEnv *env;
+    jvm->AttachCurrentThread(&env, NULL);
+    env->CallVoidMethod(initObject, initMethod);
+    GLuint texture = createTexture();
+    LOGI("texture: %d",texture)
     while (thread_flag) {
         avPacket = NULL;
         pthread_mutex_lock(&c_mutex);
@@ -296,16 +328,30 @@ void *videoProcess(void *arg) {
             uint delay = synchronize_video(pkt_duration); // ms
 //            LOGI("video show-> width: %d height: %d pts: %f delay: %f pkt_duration: %f", frame->width, frame->height,
 //                 pts, delay, pkt_duration);
-            if(delay >= 0){
+            if (delay >= 0) {
                 av_usleep(delay * 1000); // us
-                LOGI("video show->%d",delay);
-            }else {
+                LOGI("video show->%d", delay);
+            } else {
                 LOGI("video show->skip");
             }
+
+            sws_scale(sws_context,
+                      (const uint8_t *const *) frame->data, frame->linesize, 0, frame->height,
+                      (uint8_t *const* )video_out_buffer, frame->linesize);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856 , 480, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, video_out_buffer);
+            glBindTexture(GL_TEXTURE_2D, 0);
+//            env->CallVoidMethod(updateObject, updateMethod);
         }
         av_packet_free(&avPacket);
     }
     av_frame_free(&frame);
+    env->DeleteGlobalRef(initObject);
+    env->DeleteGlobalRef(updateObject);
+    jvm->DetachCurrentThread();
     return 0;
 }
 
@@ -363,7 +409,7 @@ void *audioProcess(void *arg) {
 
             // 到这里必须要有sl数据
             set_audio_clock(av_q2d(audio_stream->time_base) * frame->pts * 1000.0);// ms
-            LOGI("audio -> audclk.pts: %f", audclk.pts);
+//            LOGI("audio -> audclk.pts: %f", audclk.pts);
             wanted_nb_samples = frame->nb_samples;
 //            wanted_nb_samples = synchronize_audio(frame->nb_samples);
 //            if (!test) {
@@ -390,7 +436,7 @@ void *audioProcess(void *arg) {
                               (const uint8_t **) frame->data, frame->nb_samples);
             if (ret > 0) {
                 opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
-                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
+//                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
             } else {
                 LOGE("swr_convert err = %d", ret);
             }
@@ -485,6 +531,13 @@ void testPlayer(const char *src_filename) {
             LOGI("swr_init success");
         }
     }
+
+    if(video_stream){
+        sws_context = sws_getContext(
+                video_dec_ctx->width,video_dec_ctx->height, video_dec_ctx->pix_fmt,
+                video_dec_ctx->width,video_dec_ctx->height, AV_PIX_FMT_RGBA,
+                SWS_BILINEAR, NULL, NULL, NULL);
+    }
     //av_packet_ref
 //    init_clock(&videoState.audclk);
     //
@@ -509,6 +562,9 @@ void testPlayer(const char *src_filename) {
         delete[](out_buffer);
         swr_free(&swr_context);
     }
+    if(video_stream){
+        sws_freeContext(sws_context);
+    }
     end:
     avcodec_free_context(&video_dec_ctx);
     avcodec_free_context(&audio_dec_ctx);
@@ -527,10 +583,19 @@ void testPlayer(const char *src_filename) {
 
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_dming_testplayer_MainActivity_testFF(
+Java_com_dming_testplayer_gl_TestActivity_testFF(
         JNIEnv *env,
-        jobject, jstring path_) {
+        jobject, jstring path_, jobject init, jobject update) {
 //    av_log_set_callback(&ffmpegCallback);
+
+    jclass classInit = env->GetObjectClass(init);
+    initMethod = env->GetMethodID(classInit, "run", "()V");
+    initObject = env->NewGlobalRef(init);
+//    env->CallVoidMethod(runnable, runMethod);
+    jclass classUpdate = env->GetObjectClass(update);
+    updateMethod = env->GetMethodID(classUpdate, "run", "()V");
+    updateObject = env->NewGlobalRef(update);
+
     const char *path = env->GetStringUTFChars(path_, NULL);
     testPlayer(path);
     env->ReleaseStringUTFChars(path_, path);
@@ -568,3 +633,39 @@ Java_com_dming_testplayer_MainActivity_testFF(
 //                    res = swr_convert(swr_context, frame->data, wanted_nb_samples, NULL, 0);
 //                }
 //            }
+// $
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_startPlay(JNIEnv *env, jobject instance, jstring path_, jobject runnable) {
+    const char *path = env->GetStringUTFChars(path_, 0);
+    LOGI("path: %s", path);
+    jclass classRunnable = env->GetObjectClass(runnable);
+    jmethodID runMethod = env->GetMethodID(classRunnable, "run", "()V");
+    env->CallVoidMethod(runnable, runMethod);
+
+    env->ReleaseStringUTFChars(path_, path);
+}
+
+JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
+    jvm = vm;
+    LOGE("JNI_OnLoad");
+    JNIEnv *env;
+    if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
+        return JNI_VERSION_1_6;
+    }
+    if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_4) == JNI_OK) {
+        return JNI_VERSION_1_4;
+    }
+    if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_2) == JNI_OK) {
+        return JNI_VERSION_1_2;
+    }
+    if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_1) == JNI_OK) {
+        return JNI_VERSION_1_1;
+    }
+    return JNI_ERR;
+}
+
+JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
+    jvm = NULL;
+    LOGE("JNI_OnUnload");
+}

@@ -24,6 +24,17 @@ set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libswsc
 
 include_directories(${CMAKE_SOURCE_DIR}/ffmpeg/)
 
+#如果当前系统版本过低设置拒绝编译
+#if (${ANDROID_PLATFORM_LEVEL} LESS 11)
+#    message(FATAL_ERROR "OpenGL 2 is not supported before API level 11 (currently using ${ANDROID_PLATFORM_LEVEL}).")
+#    return()
+#elseif (${ANDROID_PLATFORM_LEVEL} LESS 18)
+#    add_definitions("-DDYNAMIC_ES3")
+    set(OPENGL_LIB GLESv2)
+#else ()
+#    set(OPENGL_LIB GLESv3)
+#endif (${ANDROID_PLATFORM_LEVEL} LESS 11)
+
 target_link_libraries(
         native-lib
         swscale
@@ -34,4 +45,6 @@ target_link_libraries(
         avfilter
         log
         android
-        OpenSLES)
+        OpenSLES
+        EGL
+        ${OPENGL_LIB})

@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
+import com.dming.testplayer.gl.DLog
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
 
@@ -39,11 +40,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun testPlay(srcPath: String){
         Thread(Runnable {
-            testFF(srcPath)
+            testFF(srcPath, Runnable {
+                DLog.i("ndk call-------------->>>")
+            })
         }).start()
     }
 
-    private external fun testFF(path: String)
+    private external fun testFF(path: String,runnable:Runnable)
 
     companion object {
 
