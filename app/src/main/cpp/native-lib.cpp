@@ -5,7 +5,7 @@
 #include <list>
 #include <pthread.h>
 #include <GLES2/gl2.h>
-//#include <EGL/egl.h>
+#include <EGL/egl.h>
 
 extern "C" {
 #include <libavutil/log.h>
