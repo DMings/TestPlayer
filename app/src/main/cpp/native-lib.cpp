@@ -49,7 +49,8 @@ static Opensl opensl;
 static struct SwrContext *swr_context;
 static struct SwsContext *sws_context;
 static uint8_t *out_buffer;
-static uint8_t *video_out_buffer;
+static uint8_t *dst_data[4];
+static int dst_linesize[4];
 static int wanted_nb_samples;
 static pthread_mutex_t c_mutex;
 static pthread_cond_t ac_cond;
@@ -330,20 +331,21 @@ void *videoProcess(void *arg) {
 //                 pts, delay, pkt_duration);
             if (delay >= 0) {
                 av_usleep(delay * 1000); // us
-                LOGI("video show->%d", delay);
+//                LOGI("video show->%d", delay);
             } else {
                 LOGI("video show->skip");
             }
 
-            sws_scale(sws_context,
-                      (const uint8_t *const *) frame->data, frame->linesize, 0, frame->height,
-                      (uint8_t *const* )video_out_buffer, frame->linesize);
-
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856 , 480, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, video_out_buffer);
-            glBindTexture(GL_TEXTURE_2D, 0);
+            ret = sws_scale(sws_context,
+                      (const uint8_t *const *) frame->data, frame->linesize,
+                      0, video_dec_ctx->height,
+                      dst_data, dst_linesize);
+            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
+//            glActiveTexture(GL_TEXTURE0);
+//            glBindTexture(GL_TEXTURE_2D, texture);
+//            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856 , 480, 0,
+//                    GL_RGBA, GL_UNSIGNED_BYTE, dst_data[0]);
+//            glBindTexture(GL_TEXTURE_2D, 0);
 //            env->CallVoidMethod(updateObject, updateMethod);
         }
         av_packet_free(&avPacket);
@@ -537,6 +539,12 @@ void testPlayer(const char *src_filename) {
                 video_dec_ctx->width,video_dec_ctx->height, video_dec_ctx->pix_fmt,
                 video_dec_ctx->width,video_dec_ctx->height, AV_PIX_FMT_RGBA,
                 SWS_BILINEAR, NULL, NULL, NULL);
+        if ((ret = av_image_alloc(dst_data, dst_linesize,
+                                  video_dec_ctx->width, video_dec_ctx->height,
+                                  AV_PIX_FMT_RGBA, 0)) < 0) {
+            LOGE("Could not allocate destination image: %d",ret);
+            goto end;
+        }
     }
     //av_packet_ref
 //    init_clock(&videoState.audclk);
