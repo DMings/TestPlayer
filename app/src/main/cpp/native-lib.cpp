@@ -341,11 +341,11 @@ void *videoProcess(void *arg) {
                       0, video_dec_ctx->height,
                       dst_data, dst_linesize);
             LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
-//            glActiveTexture(GL_TEXTURE0);
-//            glBindTexture(GL_TEXTURE_2D, texture);
-//            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856 , 480, 0,
-//                    GL_RGBA, GL_UNSIGNED_BYTE, dst_data[0]);
-//            glBindTexture(GL_TEXTURE_2D, 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856 , 480, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, dst_data[0]);
+            glBindTexture(GL_TEXTURE_2D, 0);
 //            env->CallVoidMethod(updateObject, updateMethod);
         }
         av_packet_free(&avPacket);
@@ -515,7 +515,7 @@ void testPlayer(const char *src_filename) {
         int s = av_samples_alloc(&out_buffer, NULL,
                                  av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                                  out_sample_rate,
-                                 AV_SAMPLE_FMT_S16, 0);
+                                 AV_SAMPLE_FMT_S16, 1);
         LOGI("out_sample_rate: %d s: %d", out_sample_rate, s);
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
@@ -539,11 +539,13 @@ void testPlayer(const char *src_filename) {
                 video_dec_ctx->width,video_dec_ctx->height, video_dec_ctx->pix_fmt,
                 video_dec_ctx->width,video_dec_ctx->height, AV_PIX_FMT_RGBA,
                 SWS_BILINEAR, NULL, NULL, NULL);
+        LOGI("video_dec_ctx width: %d height: %d",video_dec_ctx->width,video_dec_ctx->height);
         if ((ret = av_image_alloc(dst_data, dst_linesize,
                                   video_dec_ctx->width, video_dec_ctx->height,
-                                  AV_PIX_FMT_RGBA, 0)) < 0) {
+                                  AV_PIX_FMT_RGBA, 1)) < 0) {
             LOGE("Could not allocate destination image: %d",ret);
-            goto end;
+        }else {
+            LOGI("dst_data size: %d",ret);
         }
     }
     //av_packet_ref
@@ -567,13 +569,20 @@ void testPlayer(const char *src_filename) {
 //    decode_packet(&pkt, true);
     FLOGI("Demuxing succeeded.");
     if (audio_stream) {
-        delete[](out_buffer);
+//        delete[](out_buffer);
+        av_freep(&out_buffer);
         swr_free(&swr_context);
     }
     if(video_stream){
         sws_freeContext(sws_context);
+        av_freep(&dst_data[0]);
     }
     end:
+
+    thread_flag = false;
+    pthread_join(p_a_tid, 0);
+    pthread_join(p_v_tid, 0);
+
     avcodec_free_context(&video_dec_ctx);
     avcodec_free_context(&audio_dec_ctx);
     avformat_close_input(&fmt_ctx);
@@ -584,9 +593,6 @@ void testPlayer(const char *src_filename) {
     pthread_cond_destroy(&vc_cond);
     pthread_cond_destroy(&ac_cond);
     pthread_mutex_destroy(&c_mutex);
-    thread_flag = false;
-    pthread_join(p_a_tid, 0);
-    pthread_join(p_v_tid, 0);
 }
 
 

@@ -11,7 +11,7 @@
 typedef void (*signSlBufferCallback)();
 //typedef void (*SlBufferCallback)(uint8_t **buffer, uint32_t *bufferSize);
 
-typedef struct SLConfigure {
+struct SLConfigure {
     int sampleRate;
     int channels;
     int64_t fmt;
