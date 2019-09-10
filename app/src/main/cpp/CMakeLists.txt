@@ -7,7 +7,7 @@ add_library(native-lib
         SHARED
         native-lib.cpp
         Opensl.cpp
-        EglHelper.cpp
+        EGLEngine.cpp
         )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)
