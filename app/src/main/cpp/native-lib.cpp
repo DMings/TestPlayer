@@ -69,10 +69,11 @@ static Clock extclk;
 static std::list<AVPacket *> audio_pkt_list;
 static std::list<AVPacket *> video_pkt_list;
 
-static jobject initObject;
-static jmethodID initMethod;
-static jobject updateObject;
-static jmethodID updateMethod;
+static ANativeWindow *mWindow;
+//static jobject initObject;
+//static jmethodID initMethod;
+//static jobject updateObject;
+//static jmethodID updateMethod;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
@@ -270,7 +271,7 @@ void *videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
     AVPacket *avPacket = NULL;
-    int texture = openGL.init(nullptr,video_dec_ctx->width,video_dec_ctx->height);
+    int texture = openGL.init(mWindow,video_dec_ctx->width,video_dec_ctx->height);
     LOGI("texture: %d",texture)
     while (thread_flag) {
         avPacket = NULL;
@@ -323,7 +324,7 @@ void *videoProcess(void *arg) {
                       (const uint8_t *const *) frame->data, frame->linesize,
                       0, video_dec_ctx->height,
                       dst_data, dst_linesize);
-            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
+//            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
             openGL.draw(dst_data[0]);
 //            env->CallVoidMethod(updateObject, updateMethod);
         }
@@ -579,16 +580,18 @@ void testPlayer(const char *src_filename) {
 extern "C" JNIEXPORT void JNICALL
 Java_com_dming_testplayer_gl_TestActivity_testFF(
         JNIEnv *env,
-        jobject, jstring path_, jobject init, jobject update) {
+        jobject, jstring path_, jobject surface) {
 //    av_log_set_callback(&ffmpegCallback);
 
-    jclass classInit = env->GetObjectClass(init);
-    initMethod = env->GetMethodID(classInit, "run", "()V");
-    initObject = env->NewGlobalRef(init);
-//    env->CallVoidMethod(runnable, runMethod);
-    jclass classUpdate = env->GetObjectClass(update);
-    updateMethod = env->GetMethodID(classUpdate, "run", "()V");
-    updateObject = env->NewGlobalRef(update);
+//    jclass classInit = env->GetObjectClass(init);
+//    initMethod = env->GetMethodID(classInit, "run", "()V");
+//    initObject = env->NewGlobalRef(init);
+////    env->CallVoidMethod(runnable, runMethod);
+//    jclass classUpdate = env->GetObjectClass(update);
+//    updateMethod = env->GetMethodID(classUpdate, "run", "()V");
+//    updateObject = env->NewGlobalRef(update);
+
+    mWindow = ANativeWindow_fromSurface(env, surface);
 
     const char *path = env->GetStringUTFChars(path_, NULL);
     testPlayer(path);
@@ -641,7 +644,7 @@ Java_com_dming_testplayer_gl_TestActivity_startPlay(JNIEnv *env, jobject instanc
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
-    jvm = vm;
+//    jvm = vm;
     LOGE("JNI_OnLoad");
     JNIEnv *env;
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
@@ -660,6 +663,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 }
 
 JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
-    jvm = NULL;
+//    jvm = NULL;
     LOGE("JNI_OnUnload");
 }

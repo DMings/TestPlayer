@@ -16,6 +16,9 @@ int OpenGL::init(ANativeWindow *surface, int width, int height) {
     if (!surface) {
         return -1;
     }
+    mWidth = width;
+    mHeight = height;
+    LOGI("income width %d, surface height %d", width, height);
     mWindow = surface;
     ANativeWindow_acquire(mWindow);
     GLint majorVersion;
@@ -67,6 +70,7 @@ int OpenGL::init(ANativeWindow *surface, int width, int height) {
     glDisable(GL_CULL_FACE);
     createTexture();
     LOGI("OpenGL init success: surface width %d, surface height %d", width, height);
+    glShape.init();
     return mTexture;
 }
 
@@ -106,11 +110,14 @@ void OpenGL::createTexture() {
 }
 
 void OpenGL::draw(void *pixels) {
+    glClear(GL_COLOR_BUFFER_BIT);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856, 480, 0,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mWidth, mHeight, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
     glBindTexture(GL_TEXTURE_2D, 0);
+    glShape.onDraw(mTexture);
     eglSwapBuffers(mEglDisplay, mEglSurface);
     checkErr();
 }

@@ -8,6 +8,7 @@ add_library(native-lib
         native-lib.cpp
         Opensl.cpp
         OpenGL.cpp
+        GLShape.cpp
         )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)

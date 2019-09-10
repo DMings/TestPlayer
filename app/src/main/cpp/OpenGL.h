@@ -9,6 +9,7 @@
 #include <android/native_window_jni.h>
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
+#include "GLShape.h"
 
 class OpenGL {
 public:
@@ -18,11 +19,14 @@ public:
     void draw(void *pixels);
     void release();
 private:
+    GLShape glShape;
     ANativeWindow * mWindow;
     EGLDisplay mEglDisplay;
     EGLContext mEglContext;
     EGLSurface mEglSurface;
     GLuint mTexture = 0;
+    int mWidth;
+    int mHeight;
     void checkErr();
     void createTexture();
 };
