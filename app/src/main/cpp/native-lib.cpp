@@ -2,6 +2,7 @@
 #include <string>
 #include "log.h"
 #include "Opensl.h"
+#include "OpenGL.h"
 #include <list>
 #include <pthread.h>
 #include <GLES2/gl2.h>
@@ -46,6 +47,7 @@ static AVStream *video_stream = NULL, *audio_stream = NULL;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
 static Opensl opensl;
+static OpenGL openGL;
 static struct SwrContext *swr_context;
 static struct SwsContext *sws_context;
 static uint8_t *out_buffer;
@@ -67,7 +69,6 @@ static Clock extclk;
 static std::list<AVPacket *> audio_pkt_list;
 static std::list<AVPacket *> video_pkt_list;
 
-static JavaVM *jvm;
 static jobject initObject;
 static jmethodID initMethod;
 static jobject updateObject;
@@ -264,30 +265,12 @@ static uint synchronize_video(double pkt_duration) { // us
     return (uint) wanted_delay;
 }
 
-static GLuint createTexture() {
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameterf(GL_TEXTURE_2D,
-            GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-   glTexParameterf(GL_TEXTURE_2D,
-            GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameterf(GL_TEXTURE_2D,
-            GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameterf(GL_TEXTURE_2D,
-            GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return tex;
-}
 
 void *videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
     AVPacket *avPacket = NULL;
-    JNIEnv *env;
-    jvm->AttachCurrentThread(&env, NULL);
-    env->CallVoidMethod(initObject, initMethod);
-    GLuint texture = createTexture();
+    int texture = openGL.init(nullptr,video_dec_ctx->width,video_dec_ctx->height);
     LOGI("texture: %d",texture)
     while (thread_flag) {
         avPacket = NULL;
@@ -341,19 +324,16 @@ void *videoProcess(void *arg) {
                       0, video_dec_ctx->height,
                       dst_data, dst_linesize);
             LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856 , 480, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, dst_data[0]);
-            glBindTexture(GL_TEXTURE_2D, 0);
+            openGL.draw(dst_data[0]);
 //            env->CallVoidMethod(updateObject, updateMethod);
         }
         av_packet_free(&avPacket);
     }
     av_frame_free(&frame);
-    env->DeleteGlobalRef(initObject);
-    env->DeleteGlobalRef(updateObject);
-    jvm->DetachCurrentThread();
+    openGL.release();
+//    env->DeleteGlobalRef(initObject);
+//    env->DeleteGlobalRef(updateObject);
+//    jvm->DetachCurrentThread();
     return 0;
 }
 

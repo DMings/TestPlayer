@@ -2,17 +2,17 @@
 // Created by Administrator on 2019/9/10.
 //
 
-#include "EGLEngine.h"
+#include "OpenGL.h"
 
-EGLEngine::EGLEngine() {
-
-}
-
-EGLEngine::~EGLEngine() {
+OpenGL::OpenGL() {
 
 }
 
-int EGLEngine::init(ANativeWindow *surface, int width, int height) {
+OpenGL::~OpenGL() {
+
+}
+
+int OpenGL::init(ANativeWindow *surface, int width, int height) {
     if (!surface) {
         return -1;
     }
@@ -31,6 +31,8 @@ int EGLEngine::init(ANativeWindow *surface, int width, int height) {
             EGL_BLUE_SIZE, 8,
             EGL_GREEN_SIZE, 8,
             EGL_RED_SIZE, 8,
+            EGL_ALPHA_SIZE, 8,
+            EGL_DEPTH_SIZE, 8,
             EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
             EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
             EGL_NONE
@@ -63,11 +65,12 @@ int EGLEngine::init(ANativeWindow *surface, int width, int height) {
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_CULL_FACE);
-    LOGI("EGLEngine init success: surface width %d, surface height %d", width, height);
-    return 0;
+    createTexture();
+    LOGI("OpenGL init success: surface width %d, surface height %d", width, height);
+    return mTexture;
 }
 
-void EGLEngine::release() {
+void OpenGL::release() {
     if (mEglDisplay != EGL_NO_DISPLAY) {
         eglMakeCurrent(mEglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (mEglContext != EGL_NO_CONTEXT) {
@@ -87,7 +90,7 @@ void EGLEngine::release() {
     mWindow = NULL;
 }
 
-void EGLEngine::createTexture() {
+void OpenGL::createTexture() {
     glGenTextures(1, &mTexture);
     glBindTexture(GL_TEXTURE_2D, mTexture);
     glTexParameterf(GL_TEXTURE_2D,
@@ -102,7 +105,7 @@ void EGLEngine::createTexture() {
     checkErr();
 }
 
-void EGLEngine::draw(void *pixels) {
+void OpenGL::draw(void *pixels) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 856, 480, 0,
@@ -112,7 +115,7 @@ void EGLEngine::draw(void *pixels) {
     checkErr();
 }
 
-void EGLEngine::checkErr() {
+void OpenGL::checkErr() {
     GLenum err = glGetError();
     if (err != 0) {
         LOGE("gl get Error: %d", err)
