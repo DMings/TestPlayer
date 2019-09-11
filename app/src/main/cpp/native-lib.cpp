@@ -1,7 +1,7 @@
 #include <jni.h>
 #include <string>
 #include "log.h"
-#include "Opensl.h"
+#include "OpenSL.h"
 #include "OpenGL.h"
 #include <list>
 #include <pthread.h>
@@ -40,7 +40,7 @@ static int video_stream_idx = -1, audio_stream_idx = -1;
 static AVStream *video_stream = NULL, *audio_stream = NULL;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
-static Opensl opensl;
+static OpenSL openSL;
 static OpenGL openGL;
 static struct SwrContext *swr_context;
 static struct SwsContext *sws_context;
@@ -199,7 +199,7 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
         pkt->data = NULL;
         pkt->size = 0;
     }
-    if (pkt->stream_index == video_stream_idx && false) {
+    if (pkt->stream_index == video_stream_idx) {
 //        double t = av_gettime_relative();
         AVPacket *copy_pkg = av_packet_clone(pkt);
         if (copy_pkg != NULL) {
@@ -229,14 +229,6 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
             pthread_mutex_unlock(&c_mutex);
         }
     }
-}
-
-static void slBufferCallback() {
-    pthread_mutex_lock(&c_mutex);
-    mustFeed = true;
-    pthread_cond_signal(&a_cond);
-//    LOGI("slBufferCallback mustFeed")
-    pthread_mutex_unlock(&c_mutex);
 }
 
 static uint synchronize_video(double pkt_duration) { // us
@@ -330,6 +322,16 @@ void *videoProcess(void *arg) {
 static bool test = false;
 static int last_wanted_nb_samples = 0;
 
+static void slBufferCallback() {
+    pthread_mutex_lock(&c_mutex);
+    mustFeed = true;
+    pthread_cond_signal(&a_cond); //通知
+    pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
+    pthread_mutex_unlock(&c_mutex);
+    //在这里之后必须要有数据
+}
+
+
 void *audioProcess(void *arg) {
     int ret = 0;
     AVPacket *avPacket = NULL;
@@ -364,7 +366,7 @@ void *audioProcess(void *arg) {
         while (ret >= 0) {
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
             if (ret == AVERROR(EAGAIN)) {
-                LOGE("ret == AVERROR(EAGAIN)");
+//                LOGE("ret == AVERROR(EAGAIN)");
                 break;
             } else if (ret == AVERROR_EOF) {
                 LOGE("ret == AVERROR_EOF");
@@ -379,9 +381,7 @@ void *audioProcess(void *arg) {
             if (!mustFeed) {
                 pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
             }
-//            LOGE("mustFeed %d",mustFeed);
             mustFeed = false;
-            pthread_mutex_unlock(&c_mutex);
 
             // 到这里必须要有sl数据
             set_audio_clock(av_q2d(audio_stream->time_base) * frame->pts * 1000.0);// ms
@@ -411,11 +411,13 @@ void *audioProcess(void *arg) {
             ret = swr_convert(swr_context, &out_buffer, wanted_nb_samples,
                               (const uint8_t **) frame->data, frame->nb_samples);
             if (ret > 0) {
-                opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
+                openSL.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
+                pthread_cond_signal(&a_cond);
 //                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
             } else {
                 LOGE("swr_convert err = %d", ret);
             }
+            pthread_mutex_unlock(&c_mutex);
         }
         av_packet_free(&avPacket);
     }
@@ -475,7 +477,7 @@ void testPlayer(const char *src_filename) {
     if (audio_stream) {
         enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
         FLOGI("ffplay -ac %d -ar %d byte %d fmt_name:%s", audio_dec_ctx->channels, audio_dec_ctx->sample_rate,
-              av_get_bytes_per_sample(sfmt),av_get_sample_fmt_name(sfmt));
+              av_get_bytes_per_sample(sfmt), av_get_sample_fmt_name(sfmt));
 
     }
 
@@ -490,16 +492,17 @@ void testPlayer(const char *src_filename) {
                                  av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                                  out_sample_rate,
                                  AV_SAMPLE_FMT_S16, 1);
-        LOGI("out_sample_rate: %d s: %d", out_sample_rate, s);
+        LOGI("out_sample_rate: %d s: %d nb_channels:%d", out_sample_rate, s,
+             av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO));
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
         slConfigure.signSlBufferCallback = slBufferCallback;
-        opensl.createPlayer(&slConfigure);
+        openSL.createPlayer(&slConfigure);
         swr_context = swr_alloc();
         swr_alloc_set_opts(swr_context,
                            AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, out_sample_rate,
                            audio_dec_ctx->channel_layout, audio_dec_ctx->sample_fmt, audio_dec_ctx->sample_rate,
-                           0, NULL);
+                           1, NULL);
         ret = swr_init(swr_context);
         if (ret != 0) {
             LOGE("swr_init failed");
@@ -529,7 +532,7 @@ void testPlayer(const char *src_filename) {
     pkt.data = NULL;
     pkt.size = 0;
 
-    opensl.play();
+    openSL.play();
     pthread_create(&p_a_tid, 0, audioProcess, 0);
     pthread_create(&p_v_tid, 0, videoProcess, 0);
 
@@ -562,8 +565,8 @@ void testPlayer(const char *src_filename) {
     avcodec_free_context(&audio_dec_ctx);
     avformat_close_input(&fmt_ctx);
 
-    opensl.pause();
-    opensl.release();
+    openSL.pause();
+    openSL.release();
     pthread_cond_destroy(&a_cond);
     pthread_cond_destroy(&vc_cond);
     pthread_cond_destroy(&ac_cond);

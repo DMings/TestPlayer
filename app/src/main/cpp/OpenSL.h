@@ -18,7 +18,7 @@ struct SLConfigure {
     signSlBufferCallback signSlBufferCallback;
 };
 
-class Opensl {
+class OpenSL {
 private:
     SLObjectItf engineObject = NULL;
     SLEngineItf engineEngine = NULL;
@@ -26,20 +26,17 @@ private:
     SLObjectItf bqPlayerObject = NULL;
     SLVolumeItf bqPlayerVolume = NULL;
     SLPlayItf bqPlayerPlay = NULL;
+    SLEnvironmentalReverbItf outputMixEnvironmentalReverb = NULL;
     SLAndroidSimpleBufferQueueItf bqPlayerBufferQueue = NULL;
 public:
+    uint8_t *buffer;
+    uint32_t bufferSize;
     SLConfigure *slConfigure;
-
     int createPlayer(SLConfigure *sLConfigure);
-
     void setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize);
-
     void play();
-
     void pause();
-
     void release();
-
 };
 
 

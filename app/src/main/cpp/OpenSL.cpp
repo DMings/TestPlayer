@@ -4,18 +4,18 @@
 
 #include <unistd.h>
 #include <pthread.h>
-#include "Opensl.h"
+#include "OpenSL.h"
 
 
 //第一次主动调用在调用线程
 //之后在新线程中回调
 //static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 ////    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
-//    Opensl *opensl = (Opensl *) context;
+//    OpenSL *OpenSL = (OpenSL *) context;
 //    uint8_t *buffer;
 //    SLuint32 bufferSize;
 //
-//    opensl->slConfigure->slBufferCallback(&buffer, &bufferSize);
+//    OpenSL->slConfigure->slBufferCallback(&buffer, &bufferSize);
 //    if (bufferSize > 0) {
 //        SLresult result = (*bq)->Enqueue(bq, buffer, bufferSize);
 ////        LOGI("  bqPlayerCallback :%d size:%d", result, bufferSize);
@@ -25,22 +25,36 @@
 ////        LOGE("  decodeAudio error bqPlayerCallback :%d", result);
 //    }
 //}
+
 static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
-    ((Opensl *) context)->slConfigure->signSlBufferCallback();
-}
-
-void Opensl::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize){
-    if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
-        SLuint32 pState;
-        (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);
-        if(pState == SL_PLAYSTATE_PLAYING){
-            (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, buffer, bufferSize);
-        }
+    OpenSL *openSL = (OpenSL *) context;
+    openSL->slConfigure->signSlBufferCallback();
+    if(openSL->bufferSize){
+        SLresult result = (*bq)->Enqueue(bq, openSL->buffer, openSL->bufferSize);
+    }else {
+        uint8_t b[] = {0};
+        SLresult result = (*bq)->Enqueue(bq, b, 1);
+        LOGI("OpenSL get empty buffer!!!");
     }
+    openSL->bufferSize = 0;
+    openSL->buffer = NULL;
 }
 
-int Opensl::createPlayer(SLConfigure *sLConfigure) {
+void OpenSL::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize){
+    this->buffer = buffer;
+    this->bufferSize = bufferSize;
+//    if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
+//        SLuint32 pState;
+//        (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);
+//        if(pState == SL_PLAYSTATE_PLAYING){
+////            (*sbq)->Enqueue(bqPlayerBufferQueue, buffer, bufferSize);
+//            (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, buffer, bufferSize);
+//        }
+//    }
+}
+
+int OpenSL::createPlayer(SLConfigure *sLConfigure) {
     SLuint32 sr;
     this->slConfigure = sLConfigure;
     LOGI("sampleRate: %d, channels: %d", sLConfigure->sampleRate, sLConfigure->channels)
@@ -165,26 +179,26 @@ int Opensl::createPlayer(SLConfigure *sLConfigure) {
     return 0;
 }
 
-void Opensl::play() {
-    LOGI("Opensl play->>>>>");
+void OpenSL::play() {
+    LOGI("OpenSL play->>>>>");
     if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
         // 设置播放状态
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PLAYING);
-        this->slConfigure->signSlBufferCallback();
-//        uint8_t b[] = {0};
-//        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, b, 1);
+//        this->slConfigure->signSlBufferCallback();
+        uint8_t b[] = {0};
+        (*bqPlayerBufferQueue)->Enqueue(bqPlayerBufferQueue, b, 1);
 //        slBufferCallback(bqPlayerBufferQueue, this);
     }
 }
 
-void Opensl::pause() {
-    LOGI("Opensl pause>>>>>");
+void OpenSL::pause() {
+    LOGI("OpenSL pause>>>>>");
     if (bqPlayerPlay != NULL) {
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PAUSED);
     }
 }
 
-void Opensl::release() {
+void OpenSL::release() {
     //设置停止状态
     if (bqPlayerPlay) {
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_STOPPED);

@@ -6,7 +6,7 @@ message("ffmepg_src:" ${ffmepg_src})
 add_library(native-lib
         SHARED
         native-lib.cpp
-        Opensl.cpp
+        OpenSL.cpp
         OpenGL.cpp
         GLRender.cpp
         GLUtils.cpp
