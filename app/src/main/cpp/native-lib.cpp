@@ -19,12 +19,6 @@ extern "C" {
 #include <libavutil/time.h>
 }
 #define FLOGI(FORMAT, ...) LOGI(FORMAT,##__VA_ARGS__);
-#define FLOGE(FORMAT, ...) LOGE(FORMAT,##__VA_ARGS__);
-//#define FLOGI(FORMAT, ...) av_log(NULL, AV_LOG_INFO, FORMAT,##__VA_ARGS__);
-
-#define SAMPLE_CORRECTION_PERCENT_MAX 10
-#define AV_NOSYNC_THRESHOLD 10.0
-#define AUDIO_DIFF_AVG_NB   20
 
 enum {
     AV_SYNC_AUDIO_MASTER, /* default choice */
@@ -70,15 +64,10 @@ static std::list<AVPacket *> audio_pkt_list;
 static std::list<AVPacket *> video_pkt_list;
 
 static ANativeWindow *mWindow;
-//static jobject initObject;
-//static jmethodID initMethod;
-//static jobject updateObject;
-//static jmethodID updateMethod;
 
 static int open_codec_context(const char *src_filename, int *stream_idx,
                               AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx,
                               enum AVMediaType type) {
-//    eglGetCurrentContext();
     int ret, stream_index;
     AVCodec *dec = NULL;
     AVDictionary *opts = NULL;
@@ -271,8 +260,8 @@ void *videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
     AVPacket *avPacket = NULL;
-    int texture = openGL.init(mWindow,NULL,video_dec_ctx->width,video_dec_ctx->height);
-    LOGI("texture: %d",texture)
+    int texture = openGL.init(mWindow, NULL, video_dec_ctx->width, video_dec_ctx->height);
+    LOGI("texture: %d", texture)
     while (thread_flag) {
         avPacket = NULL;
         pthread_mutex_lock(&c_mutex);
@@ -304,7 +293,7 @@ void *videoProcess(void *arg) {
                 continue;
             } else if (ret < 0) {
                 LOGE("Error video during decoding");
-                continue;
+                return NULL;
             }
             //  用 st 上的时基才对 video_stream
             double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
@@ -321,9 +310,9 @@ void *videoProcess(void *arg) {
             }
 
             ret = sws_scale(sws_context,
-                      (const uint8_t *const *) frame->data, frame->linesize,
-                      0, video_dec_ctx->height,
-                      dst_data, dst_linesize);
+                            (const uint8_t *const *) frame->data, frame->linesize,
+                            0, video_dec_ctx->height,
+                            dst_data, dst_linesize);
 //            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
             openGL.draw(dst_data[0]);
 //            env->CallVoidMethod(updateObject, updateMethod);
@@ -374,11 +363,15 @@ void *audioProcess(void *arg) {
         }
         while (ret >= 0) {
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
+            if (ret == AVERROR(EAGAIN)) {
+                LOGE("ret == AVERROR(EAGAIN)");
+                break;
+            } else if (ret == AVERROR_EOF) {
+                LOGE("ret == AVERROR_EOF");
                 break;
             } else if (ret < 0) {
                 LOGE("Error audio during decoding");
+                av_packet_free(&avPacket);
                 av_frame_free(&frame);
                 return NULL;
             }
@@ -419,7 +412,7 @@ void *audioProcess(void *arg) {
                               (const uint8_t **) frame->data, frame->nb_samples);
             if (ret > 0) {
                 opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
-                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
+//                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
             } else {
                 LOGE("swr_convert err = %d", ret);
             }
@@ -481,8 +474,9 @@ void testPlayer(const char *src_filename) {
 
     if (audio_stream) {
         enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
-        FLOGI("ffplay -ac %d -ar %d byte %d", audio_dec_ctx->channels, audio_dec_ctx->sample_rate,
-              av_get_bytes_per_sample(sfmt));
+        FLOGI("ffplay -ac %d -ar %d byte %d fmt_name:%s", audio_dec_ctx->channels, audio_dec_ctx->sample_rate,
+              av_get_bytes_per_sample(sfmt),av_get_sample_fmt_name(sfmt));
+
     }
 
     pthread_mutex_init(&c_mutex, NULL);
@@ -492,7 +486,6 @@ void testPlayer(const char *src_filename) {
 
     if (audio_stream) {
         out_sample_rate = audio_dec_ctx->sample_rate;
-//    out_buffer = (uint8_t *) av_malloc(static_cast<size_t>(out_sample_rate * out_channel * 2));
         int s = av_samples_alloc(&out_buffer, NULL,
                                  av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                                  out_sample_rate,
@@ -515,18 +508,18 @@ void testPlayer(const char *src_filename) {
         }
     }
 
-    if(video_stream){
+    if (video_stream) {
         sws_context = sws_getContext(
-                video_dec_ctx->width,video_dec_ctx->height, video_dec_ctx->pix_fmt,
-                video_dec_ctx->width,video_dec_ctx->height, AV_PIX_FMT_RGBA,
+                video_dec_ctx->width, video_dec_ctx->height, video_dec_ctx->pix_fmt,
+                video_dec_ctx->width, video_dec_ctx->height, AV_PIX_FMT_RGBA,
                 SWS_BILINEAR, NULL, NULL, NULL);
-        LOGI("video_dec_ctx width: %d height: %d",video_dec_ctx->width,video_dec_ctx->height);
+        LOGI("video_dec_ctx width: %d height: %d", video_dec_ctx->width, video_dec_ctx->height);
         if ((ret = av_image_alloc(dst_data, dst_linesize,
                                   video_dec_ctx->width, video_dec_ctx->height,
                                   AV_PIX_FMT_RGBA, 1)) < 0) {
-            LOGE("Could not allocate destination image: %d",ret);
-        }else {
-            LOGI("dst_data size: %d",ret);
+            LOGE("Could not allocate destination image: %d", ret);
+        } else {
+            LOGI("dst_data size: %d", ret);
         }
     }
     //av_packet_ref
@@ -544,6 +537,7 @@ void testPlayer(const char *src_filename) {
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         decode_packet(&pkt, false);
     }
+    decode_packet(&pkt, true);
     /* flush cached frames */
 //    avcodec_flush_buffers(audio_dec_ctx);
 //    FLOGI("flush cached frames.");
@@ -554,7 +548,7 @@ void testPlayer(const char *src_filename) {
         av_freep(&out_buffer);
         swr_free(&swr_context);
     }
-    if(video_stream){
+    if (video_stream) {
         sws_freeContext(sws_context);
         av_freep(&dst_data[0]);
     }
