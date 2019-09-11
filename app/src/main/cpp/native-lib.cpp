@@ -234,7 +234,7 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
 static uint synchronize_video(double pkt_duration) { // us
     double wanted_delay = -1;
     double diff_ms;
-    double duration = pkt_duration < 200 ? pkt_duration : 0;
+    double duration = pkt_duration < 200 ? pkt_duration : 200;
     diff_ms = get_video_pts_clock() - get_audio_clock();
     if (diff_ms < 0) { // 视频落后时间
         if (duration > 0 && wanted_delay < duration * 0.3) {
@@ -243,7 +243,7 @@ static uint synchronize_video(double pkt_duration) { // us
     } else { // 视频超过时间
         wanted_delay = diff_ms;
     }
-    LOGI("video diff_ms: %f wanted_delay: %f", diff_ms, wanted_delay);
+//    LOGI("video diff_ms: %f wanted_delay: %f pkt_duration: %f get_video_pts_clock: %f", diff_ms, wanted_delay,pkt_duration,get_video_pts_clock());
     return (uint) wanted_delay;
 }
 
@@ -281,8 +281,12 @@ void *videoProcess(void *arg) {
         }
         while (ret >= 0) {
             ret = avcodec_receive_frame(video_dec_ctx, frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                continue;
+            if (ret == AVERROR(EAGAIN)) {
+//                LOGE("ret == AVERROR(EAGAIN)");
+                break;
+            } else if (ret == AVERROR_EOF) {
+                LOGE("ret == AVERROR_EOF");
+                break;
             } else if (ret < 0) {
                 LOGE("Error video during decoding");
                 return NULL;
@@ -290,7 +294,8 @@ void *videoProcess(void *arg) {
             //  用 st 上的时基才对 video_stream
             double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
             double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
-            set_video_clock(pts);
+            LOGI("video pts: %f best_effort_timestamp: %lld pkt_duration: %lld", pts,frame->best_effort_timestamp,frame->pkt_duration);
+            set_video_clock(frame->best_effort_timestamp);
             uint delay = synchronize_video(pkt_duration); // ms
 //            LOGI("video show-> width: %d height: %d pts: %f delay: %f pkt_duration: %f", frame->width, frame->height,
 //                 pts, delay, pkt_duration);
@@ -384,8 +389,12 @@ void *audioProcess(void *arg) {
             mustFeed = false;
 
             // 到这里必须要有sl数据
-            set_audio_clock(av_q2d(audio_stream->time_base) * frame->pts * 1000.0);// ms
-//            LOGI("audio -> audclk.pts: %f", audclk.pts);
+//            set_audio_clock(frame->best_effort_timestamp);// ms
+            double pts = av_q2d(audio_stream->time_base) * frame->pts * 1000.0;
+            AVRational tb = (AVRational){1, frame->sample_rate};
+            double pts2 = av_rescale_q(frame->pts, audio_dec_ctx->pkt_timebase, tb);
+            set_audio_clock(pts);// ms
+            LOGI("audio pts: %f pts2: %f best_effort_timestamp: %lld pkt_duration: %lld", pts,pts2,frame->best_effort_timestamp,frame->pkt_duration);
             wanted_nb_samples = frame->nb_samples;
 //            wanted_nb_samples = synchronize_audio(frame->nb_samples);
 //            if (!test) {

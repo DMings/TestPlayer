@@ -53,6 +53,9 @@ int OpenGL::init(ANativeWindow *surface,EGLContext eglContext, int width, int he
         !eglQuerySurface(mEglDisplay, mEglSurface, EGL_HEIGHT, &height)) {
         return -1;
     }
+
+    ANativeWindow_setBuffersGeometry(mWindow,width,height, WINDOW_FORMAT_RGBA_8888);
+
     EGLint context_attr[] = {
             EGL_CONTEXT_CLIENT_VERSION, 2,
             EGL_NONE
