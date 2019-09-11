@@ -8,13 +8,13 @@
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
 #include "log.h"
-#include <malloc.h>
 #include <jni.h>
+#include "GLUtils.h"
 
 class GLShape {
 public:
     void onDraw(GLuint texture);
-    void init();
+    void init(float ratioY);
 
 private:
     GLuint mProgram;
@@ -22,7 +22,6 @@ private:
     GLuint mTextureCoordinate;
     GLuint mImageTexture;
     GLuint mMatrix;
-    float* mModelMatrix = new float[4 * 4];
 };
 
 

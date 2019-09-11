@@ -210,7 +210,7 @@ static void decode_packet(AVPacket *pkt, bool clear_cache) {
         pkt->data = NULL;
         pkt->size = 0;
     }
-    if (pkt->stream_index == video_stream_idx) {
+    if (pkt->stream_index == video_stream_idx && false) {
 //        double t = av_gettime_relative();
         AVPacket *copy_pkg = av_packet_clone(pkt);
         if (copy_pkg != NULL) {
@@ -271,7 +271,7 @@ void *videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
     AVPacket *avPacket = NULL;
-    int texture = openGL.init(mWindow,video_dec_ctx->width,video_dec_ctx->height);
+    int texture = openGL.init(mWindow,NULL,video_dec_ctx->width,video_dec_ctx->height);
     LOGI("texture: %d",texture)
     while (thread_flag) {
         avPacket = NULL;
@@ -375,7 +375,7 @@ void *audioProcess(void *arg) {
         while (ret >= 0) {
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-//                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
+                LOGE("ret == AVERROR(EAGAIN) || ret == AVERROR_EOF");
                 break;
             } else if (ret < 0) {
                 LOGE("Error audio during decoding");
@@ -419,7 +419,7 @@ void *audioProcess(void *arg) {
                               (const uint8_t **) frame->data, frame->nb_samples);
             if (ret > 0) {
                 opensl.setEnqueueBuffer(out_buffer, (uint32_t) ret * 4);
-//                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
+                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
             } else {
                 LOGE("swr_convert err = %d", ret);
             }

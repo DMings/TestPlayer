@@ -12,12 +12,12 @@ OpenGL::~OpenGL() {
 
 }
 
-int OpenGL::init(ANativeWindow *surface, int width, int height) {
+int OpenGL::init(ANativeWindow *surface,EGLContext eglContext, int width, int height) {
     if (!surface) {
         return -1;
     }
-    mWidth = width;
-    mHeight = height;
+    mTexWidth = width;
+    mTexHeight = height;
     LOGI("income width %d, surface height %d", width, height);
     mWindow = surface;
     ANativeWindow_acquire(mWindow);
@@ -57,7 +57,8 @@ int OpenGL::init(ANativeWindow *surface, int width, int height) {
             EGL_CONTEXT_CLIENT_VERSION, 2,
             EGL_NONE
     };
-    mEglContext = eglCreateContext(mEglDisplay, eglConfig, EGL_NO_CONTEXT, context_attr);
+    mEglContext = eglCreateContext(mEglDisplay, eglConfig,
+                                   eglContext != NULL ? eglContext : EGL_NO_CONTEXT, context_attr);
     if (EGL_NO_CONTEXT == mEglContext) {
         return -1;
     }
@@ -69,8 +70,10 @@ int OpenGL::init(ANativeWindow *surface, int width, int height) {
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_CULL_FACE);
     createTexture();
-    LOGI("OpenGL init success: surface width %d, surface height %d", width, height);
-    glShape.init();
+    float tr = mTexWidth * 1.0f / mTexHeight;
+    float ratioY = (width / tr) / height;
+    LOGI("OpenGL init success: surface width %d, surface height %d ratioY:%f", width, height,ratioY);
+    glShape.init(ratioY);
     return mTexture;
 }
 
@@ -106,25 +109,17 @@ void OpenGL::createTexture() {
     glTexParameterf(GL_TEXTURE_2D,
                     GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
-    checkErr();
+    GLUtils::checkErr("createTexture");
 }
 
 void OpenGL::draw(void *pixels) {
     glClear(GL_COLOR_BUFFER_BIT);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mWidth, mHeight, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mTexWidth, mTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
     glShape.onDraw(mTexture);
     eglSwapBuffers(mEglDisplay, mEglSurface);
-    checkErr();
+    GLUtils::checkErr("draw");
 }
 
-void OpenGL::checkErr() {
-    GLenum err = glGetError();
-    if (err != 0) {
-        LOGE("gl get Error: %d", err)
-    }
-}

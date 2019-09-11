@@ -60,7 +60,8 @@ public class TestActivity extends AppCompatActivity {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
+                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/video2.mp4").getPath();
+//                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
                         testFF(srcPath,mSurfaceView.getHolder().getSurface());
 //                        testFF(srcPath, new Runnable() {
 //                            @Override
