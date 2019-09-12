@@ -24,13 +24,13 @@ public class TestActivity extends AppCompatActivity {
 
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
-//    private EglHelper mEglHelper2 = new EglHelper();
+    //    private EglHelper mEglHelper2 = new EglHelper();
     private NormalFilter mNoFilter;
     private int mTexture = -1;
     private Handler mHandler;
     private HandlerThread mHandlerThread;
     private Handler mMainHandler = new Handler();
-//    private FSurfaceView mFSurfaceView;
+    //    private FSurfaceView mFSurfaceView;
     private SurfaceView mSurfaceView;
     private ByteBuffer mByteBuffer;
     private int count = 0;
@@ -42,7 +42,7 @@ public class TestActivity extends AppCompatActivity {
 
     private native void startPlay(String path, Runnable runnable);
 
-//    private native void testFF(String path, Runnable init, Runnable update);
+    //    private native void testFF(String path, Runnable init, Runnable update);
     private native void testFF(String path, Surface surface);
 
     @Override
@@ -62,7 +62,8 @@ public class TestActivity extends AppCompatActivity {
                     public void run() {
                         String srcPath = new File(Environment.getExternalStorageDirectory(), "1/video2.mp4").getPath();
 //                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
-                        testFF(srcPath,mSurfaceView.getHolder().getSurface());
+                        mSurface = mSurfaceView.getHolder().getSurface();
+                        testFF(srcPath, mSurface);
 //                        testFF(srcPath, new Runnable() {
 //                            @Override
 //                            public void run() {

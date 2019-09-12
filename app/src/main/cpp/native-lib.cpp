@@ -49,8 +49,8 @@ static uint8_t *dst_data[4];
 static int dst_linesize[4];
 static int wanted_nb_samples;
 static pthread_mutex_t c_mutex;
-static pthread_cond_t ac_cond;
-static pthread_cond_t vc_cond;
+static pthread_mutex_t a_mutex;
+static pthread_cond_t c_cond;
 static pthread_cond_t a_cond;
 static bool mustFeed = false;
 static pthread_t p_a_tid;
@@ -80,7 +80,6 @@ static int open_codec_context(const char *src_filename, int *stream_idx,
     } else {
         stream_index = ret;
         st = fmt_ctx->streams[stream_index];
-        LOGI("fmt_ctx->streams %lld => %d %d", st->duration, st->time_base.num, st->time_base.den);
         dec = avcodec_find_decoder(st->codecpar->codec_id);
         if (!dec) {
             FLOGI("Failed to find %s codec",
@@ -105,6 +104,7 @@ static int open_codec_context(const char *src_filename, int *stream_idx,
             return ret;
         }
         *stream_idx = stream_index;
+        LOGI("(*dec_ctx) => %d %d",  (*dec_ctx)->time_base.num, (*dec_ctx)->time_base.den);
     }
     return 0;
 }
@@ -123,6 +123,9 @@ static double get_master_clock() {
 }
 
 static double get_audio_clock() {
+    if(audclk.pts == 0){
+        return 0;
+    }
     double time = av_gettime_relative() / 1000.0;
     if (audclk.last_updated == 0) {
         audclk.last_updated = time;
@@ -194,41 +197,31 @@ static int synchronize_audio(int nb_samples) {
 //AVFrame *frame = av_frame_alloc();
 
 static void decode_packet(AVPacket *pkt, bool clear_cache) {
-    int ret = 0;
+    const char *stream_id = "-";
     if (clear_cache) {
         pkt->data = NULL;
         pkt->size = 0;
     }
     if (pkt->stream_index == video_stream_idx) {
-//        double t = av_gettime_relative();
+        stream_id = "video";
         AVPacket *copy_pkg = av_packet_clone(pkt);
         if (copy_pkg != NULL) {
-            pthread_mutex_lock(&c_mutex);
-//            if (video_pkt_list.size() >= 2) {
-//                pthread_cond_wait(&c_cond, &c_mutex);
-//                video_pkt_list.push_back(copy_pkg);
-//                pthread_cond_signal(&c_cond);
-//            } else {
             video_pkt_list.push_back(copy_pkg);
-            pthread_cond_signal(&vc_cond);
-//            }
-            pthread_mutex_unlock(&c_mutex);
         }
     } else if (pkt->stream_index == audio_stream_idx) {
+        stream_id = "audio";
         AVPacket *copy_pkg = av_packet_clone(pkt);
         if (copy_pkg != NULL) {
-            pthread_mutex_lock(&c_mutex);
-            if (audio_pkt_list.size() >= 2) {
-                pthread_cond_wait(&ac_cond, &c_mutex);
-                audio_pkt_list.push_back(copy_pkg);
-                pthread_cond_signal(&ac_cond);
-            } else {
-                audio_pkt_list.push_back(copy_pkg);
-                pthread_cond_signal(&ac_cond);
-            }
-            pthread_mutex_unlock(&c_mutex);
+            audio_pkt_list.push_back(copy_pkg);
         }
     }
+    LOGI("stream_id ->: %s", stream_id)
+    pthread_mutex_lock(&c_mutex);
+    pthread_cond_broadcast(&c_cond);
+    if (audio_pkt_list.size() >= 2 && video_pkt_list.size() >= 2) {
+        pthread_cond_wait(&c_cond, &c_mutex);
+    }
+    pthread_mutex_unlock(&c_mutex);
 }
 
 static uint synchronize_video(double pkt_duration) { // us
@@ -247,6 +240,7 @@ static uint synchronize_video(double pkt_duration) { // us
     return (uint) wanted_delay;
 }
 
+double video_time;
 
 void *videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
@@ -256,23 +250,28 @@ void *videoProcess(void *arg) {
     LOGI("texture: %d", texture)
     while (thread_flag) {
         avPacket = NULL;
-        pthread_mutex_lock(&c_mutex);
-        if (!video_pkt_list.empty()) {
-            avPacket = video_pkt_list.front();
-            video_pkt_list.pop_front();
-        } else {
-            pthread_cond_wait(&vc_cond, &c_mutex);
+        do {
+            LOGE("video_pkt_list size: %d", video_pkt_list.size())
             if (!video_pkt_list.empty()) {
                 avPacket = video_pkt_list.front();
                 video_pkt_list.pop_front();
+                if (video_pkt_list.size() <= 1) {
+                    pthread_mutex_lock(&c_mutex);
+                    pthread_cond_broadcast(&c_cond);
+                    pthread_mutex_unlock(&c_mutex);
+                }
+            } else {
+                pthread_mutex_lock(&c_mutex);
+                pthread_cond_broadcast(&c_cond);
+                pthread_cond_wait(&c_cond, &c_mutex);
+                pthread_mutex_unlock(&c_mutex);
+                if (!video_pkt_list.empty()) {
+                    avPacket = video_pkt_list.front();
+                    video_pkt_list.pop_front();
+                }
             }
-        }
-        pthread_mutex_unlock(&c_mutex);
-
-        if (avPacket == NULL) {
-            continue;
-        }
-
+        } while (avPacket == NULL);
+        LOGI("video decode ")
         // 解码
         ret = avcodec_send_packet(video_dec_ctx, avPacket);
         if (ret < 0) {
@@ -284,32 +283,34 @@ void *videoProcess(void *arg) {
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                 break;
-            } else if (ret == AVERROR_EOF) {
-                LOGE("ret == AVERROR_EOF");
+            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) || ret == AVERROR_INPUT_CHANGED) {
+                LOGE("video some err!");
                 break;
             } else if (ret < 0) {
-                LOGE("Error video during decoding");
-                return NULL;
+                LOGE("video legitimate decoding errors");
+                break;
             }
             //  用 st 上的时基才对 video_stream
             double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
             double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
-            LOGI("video pts: %f best_effort_timestamp: %lld pkt_duration: %lld", pts,frame->best_effort_timestamp,frame->pkt_duration);
-            set_video_clock(frame->best_effort_timestamp);
-            uint delay = synchronize_video(pkt_duration); // ms
-//            LOGI("video show-> width: %d height: %d pts: %f delay: %f pkt_duration: %f", frame->width, frame->height,
-//                 pts, delay, pkt_duration);
-            if (delay >= 0) {
-                av_usleep(delay * 1000); // us
-//                LOGI("video show->%d", delay);
-            } else {
-                LOGI("video show->skip");
-            }
-
             ret = sws_scale(sws_context,
                             (const uint8_t *const *) frame->data, frame->linesize,
                             0, video_dec_ctx->height,
                             dst_data, dst_linesize);
+            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts, get_audio_clock(),get_master_clock(),
+                 pkt_duration);
+            set_video_clock(pts);
+            uint delay = synchronize_video(pkt_duration); // ms
+//            LOGI("video show-> width: %d height: %d pts: %f delay: %f pkt_duration: %f", frame->width, frame->height,
+//                 pts, delay, pkt_duration);
+
+            if (delay >= 0) {
+                av_usleep(delay * 1000); // us
+                LOGI("video show->%d get_master_clock: %f video_time: %f", delay,get_master_clock(),(get_master_clock() - video_time));
+            } else {
+                LOGI("video show->skip get_master_clock: %f video_time: %f",get_master_clock(),(get_master_clock() - video_time));
+            }
+            video_time = get_master_clock();
 //            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
             openGL.draw(dst_data[0]);
 //            env->CallVoidMethod(updateObject, updateMethod);
@@ -328,11 +329,11 @@ static bool test = false;
 static int last_wanted_nb_samples = 0;
 
 static void slBufferCallback() {
-    pthread_mutex_lock(&c_mutex);
+    pthread_mutex_lock(&a_mutex);
     mustFeed = true;
     pthread_cond_signal(&a_cond); //通知
-    pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
-    pthread_mutex_unlock(&c_mutex);
+    pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
+    pthread_mutex_unlock(&a_mutex);
     //在这里之后必须要有数据
 }
 
@@ -343,24 +344,28 @@ void *audioProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     while (thread_flag) {
         avPacket = NULL;
-        pthread_mutex_lock(&c_mutex);
-        if (!audio_pkt_list.empty()) {
-            avPacket = audio_pkt_list.front();
-            audio_pkt_list.pop_front();
-            pthread_cond_signal(&ac_cond);
-        } else {
-            pthread_cond_signal(&ac_cond);
-            pthread_cond_wait(&ac_cond, &c_mutex);
+        do {
+            LOGI("audio_pkt_list size: %d", audio_pkt_list.size())
             if (!audio_pkt_list.empty()) {
                 avPacket = audio_pkt_list.front();
                 audio_pkt_list.pop_front();
+                if (audio_pkt_list.size() <= 1) {
+                    pthread_mutex_lock(&c_mutex);
+                    pthread_cond_broadcast(&c_cond);
+                    pthread_mutex_unlock(&c_mutex);
+                }
+            } else {
+                pthread_mutex_lock(&c_mutex);
+                pthread_cond_broadcast(&c_cond);
+                pthread_cond_wait(&c_cond, &c_mutex);
+                pthread_mutex_unlock(&c_mutex);
+                if (!audio_pkt_list.empty()) {
+                    avPacket = audio_pkt_list.front();
+                    audio_pkt_list.pop_front();
+                }
             }
-        }
-        pthread_mutex_unlock(&c_mutex);
+        } while (avPacket == NULL);
 
-        if (avPacket == NULL) {
-            continue;
-        }
         // 解码
         ret = avcodec_send_packet(audio_dec_ctx, avPacket);
         if (ret < 0) {
@@ -373,28 +378,25 @@ void *audioProcess(void *arg) {
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                 break;
-            } else if (ret == AVERROR_EOF) {
-                LOGE("ret == AVERROR_EOF");
+            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) || ret == AVERROR_INPUT_CHANGED) {
+                LOGE("audio some err!");
                 break;
             } else if (ret < 0) {
-                LOGE("Error audio during decoding");
-                av_packet_free(&avPacket);
-                av_frame_free(&frame);
-                return NULL;
+                LOGE("audio legitimate decoding errors");
+                break;
             }
-            pthread_mutex_lock(&c_mutex);
+            pthread_mutex_lock(&a_mutex);
             if (!mustFeed) {
-                pthread_cond_wait(&a_cond, &c_mutex); // 等待回调
+                pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
             }
             mustFeed = false;
 
             // 到这里必须要有sl数据
 //            set_audio_clock(frame->best_effort_timestamp);// ms
             double pts = av_q2d(audio_stream->time_base) * frame->pts * 1000.0;
-            AVRational tb = (AVRational){1, frame->sample_rate};
-            double pts2 = av_rescale_q(frame->pts, audio_dec_ctx->pkt_timebase, tb);
             set_audio_clock(pts);// ms
-            LOGI("audio pts: %f pts2: %f best_effort_timestamp: %lld pkt_duration: %lld", pts,pts2,frame->best_effort_timestamp,frame->pkt_duration);
+            LOGI("audio pts: %f best_effort_timestamp: %lld get_master_clock: %f", pts, frame->best_effort_timestamp,
+                 get_master_clock());
             wanted_nb_samples = frame->nb_samples;
 //            wanted_nb_samples = synchronize_audio(frame->nb_samples);
 //            if (!test) {
@@ -426,7 +428,7 @@ void *audioProcess(void *arg) {
             } else {
                 LOGE("swr_convert err = %d", ret);
             }
-            pthread_mutex_unlock(&c_mutex);
+            pthread_mutex_unlock(&a_mutex);
         }
         av_packet_free(&avPacket);
     }
@@ -491,9 +493,9 @@ void testPlayer(const char *src_filename) {
     }
 
     pthread_mutex_init(&c_mutex, NULL);
+    pthread_mutex_init(&a_mutex, NULL);
     pthread_cond_init(&a_cond, NULL);
-    pthread_cond_init(&vc_cond, NULL);
-    pthread_cond_init(&ac_cond, NULL);
+    pthread_cond_init(&c_cond, NULL);
 
     if (audio_stream) {
         out_sample_rate = audio_dec_ctx->sample_rate;
@@ -577,9 +579,9 @@ void testPlayer(const char *src_filename) {
     openSL.pause();
     openSL.release();
     pthread_cond_destroy(&a_cond);
-    pthread_cond_destroy(&vc_cond);
-    pthread_cond_destroy(&ac_cond);
+    pthread_cond_destroy(&c_cond);
     pthread_mutex_destroy(&c_mutex);
+    pthread_mutex_destroy(&a_mutex);
 }
 
 
