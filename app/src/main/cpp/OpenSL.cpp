@@ -30,9 +30,9 @@ static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
     OpenSL *openSL = (OpenSL *) context;
     openSL->slConfigure->signSlBufferCallback();
-    if(openSL->bufferSize){
+    if (openSL->bufferSize) {
         SLresult result = (*bq)->Enqueue(bq, openSL->buffer, openSL->bufferSize);
-    }else {
+    } else {
         uint8_t b[] = {0};
         SLresult result = (*bq)->Enqueue(bq, b, 1);
         LOGI("OpenSL get empty buffer!!!");
@@ -41,7 +41,7 @@ static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
     openSL->buffer = NULL;
 }
 
-void OpenSL::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize){
+void OpenSL::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize) {
     this->buffer = buffer;
     this->bufferSize = bufferSize;
 //    if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
@@ -54,11 +54,9 @@ void OpenSL::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize){
 //    }
 }
 
-int OpenSL::createPlayer(SLConfigure *sLConfigure) {
+SLuint32 OpenSL::getSupportSampleRate(int sample_rate) {
     SLuint32 sr;
-    this->slConfigure = sLConfigure;
-    LOGI("sampleRate: %d, channels: %d", sLConfigure->sampleRate, sLConfigure->channels)
-    switch (sLConfigure->sampleRate) {
+    switch (sample_rate) {
         case 8000:
             sr = SL_SAMPLINGRATE_8;
             break;
@@ -96,14 +94,21 @@ int OpenSL::createPlayer(SLConfigure *sLConfigure) {
             sr = SL_SAMPLINGRATE_192;
             break;
         default:
-            return -1;
+            sr = 0;
+            break;
     }
+    return sr;
+}
 
+int OpenSL::createPlayer(SLConfigure *sLConfigure) {
+    this->slConfigure = sLConfigure;
+    LOGI("sampleRate: %d, channels: %d", sLConfigure->sampleRate, sLConfigure->channels)
     int speakers;
     if (sLConfigure->channels > 1)
         speakers = SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT;
     else speakers = SL_SPEAKER_FRONT_CENTER;
-    SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, (SLuint32) sLConfigure->channels, sr,
+    SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, (SLuint32) sLConfigure->channels,
+                                   (SLuint32) sLConfigure->sampleRate,
                                    SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
                                    (SLuint32) speakers, SL_BYTEORDER_LITTLEENDIAN};
     //--------------------------------------------------------------------------------

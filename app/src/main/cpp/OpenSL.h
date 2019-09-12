@@ -26,7 +26,6 @@ private:
     SLObjectItf bqPlayerObject = NULL;
     SLVolumeItf bqPlayerVolume = NULL;
     SLPlayItf bqPlayerPlay = NULL;
-    SLEnvironmentalReverbItf outputMixEnvironmentalReverb = NULL;
     SLAndroidSimpleBufferQueueItf bqPlayerBufferQueue = NULL;
 public:
     uint8_t *buffer;
@@ -37,6 +36,7 @@ public:
     void play();
     void pause();
     void release();
+    SLuint32 getSupportSampleRate(int sample_rate);
 };
 
 

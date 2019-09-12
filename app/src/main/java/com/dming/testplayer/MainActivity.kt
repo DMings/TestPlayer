@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
         val srcPath = File(Environment.getExternalStorageDirectory(), "1/animation.mp4").path
         Log.i("DMFF", "srcPath: $srcPath")
         btn_test.setOnClickListener {
-            val newFile = File(Environment.getExternalStorageDirectory(),"1/newFile.txt");
+//            val newFile = File(Environment.getExternalStorageDirectory(),"1/newFile.txt");
 //            newFile.createNewFile();
 
 //            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

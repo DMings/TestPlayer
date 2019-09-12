@@ -10,6 +10,9 @@ add_library(native-lib
         OpenGL.cpp
         GLRender.cpp
         GLUtils.cpp
+        FPlayer.cpp
+        Video.cpp
+        Audio.cpp
         )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)
