@@ -108,7 +108,7 @@ int OpenSL::createPlayer(SLConfigure *sLConfigure) {
         speakers = SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT;
     else speakers = SL_SPEAKER_FRONT_CENTER;
     SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM, (SLuint32) sLConfigure->channels,
-                                   (SLuint32) sLConfigure->sampleRate,
+                                   (SLuint32) getSupportSampleRate(sLConfigure->sampleRate),
                                    SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
                                    (SLuint32) speakers, SL_BYTEORDER_LITTLEENDIAN};
     //--------------------------------------------------------------------------------

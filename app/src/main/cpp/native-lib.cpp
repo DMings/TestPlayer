@@ -3,7 +3,7 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include "log.h"
-#include "FPlayer.h"
+#include "FPlayer2.h"
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_dming_testplayer_gl_TestActivity_testFF(
@@ -11,7 +11,7 @@ Java_com_dming_testplayer_gl_TestActivity_testFF(
         jobject, jstring path_, jobject surface) {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     const char *path = env->GetStringUTFChars(path_, NULL);
-    FPlayer::startPlayer(path, window);
+    startPlayer(path, window);
     env->ReleaseStringUTFChars(path_, path);
 }
 

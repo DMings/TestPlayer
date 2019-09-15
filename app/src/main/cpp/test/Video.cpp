@@ -148,7 +148,7 @@ int Video::open_stream(ANativeWindow *window) {
             LOGE("Could not allocate destination image: %d", ret);
         } else {
             LOGI("dst_data size: %d", ret);
-            pthread_create(&p_video_tid, 0, Video::videoProcess, 0);
+            pthread_create(&p_video_tid, 0, Video::videoProcess, this);
         }
     }
     return ret;

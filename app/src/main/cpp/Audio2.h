@@ -6,7 +6,7 @@
 #ifndef TESTPLAYER_AUDIO_H
 #define TESTPLAYER_AUDIO_H
 
-#include "FPlayer.h"
+#include "FFmpeg.h"
 #include "OpenSL.h"
 
 class Audio {
@@ -25,11 +25,13 @@ public:
 
     void release();
 
-private:
-    static Clock audio_clk;
     static bool must_feed;
     static pthread_mutex_t a_mutex;
     static pthread_cond_t a_cond;
+
+private:
+    static Clock audio_clk;
+
     static void *audioProcess(void *arg);
     AVStream *audio_stream = NULL;
     AVCodecContext *audio_dec_ctx = NULL;

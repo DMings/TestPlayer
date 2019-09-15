@@ -1,23 +1,27 @@
 //
+// Created by DMing on 2019/9/14.
+//
+
+#include "FFmpeg.h"
+
+//
 // Created by Administrator on 2019/9/12.
 //
 
-#include "FPlayer.h"
+AVFormatContext *fmt_ctx = NULL;
 
-AVFormatContext *FPlayer::fmt_ctx = NULL;
+int video_stream_id = -1;
+int audio_stream_id = -1;
 
-int FPlayer::video_stream_id = -1;
-int FPlayer::audio_stream_id = -1;
+pthread_cond_t c_cond;
+pthread_mutex_t c_mutex;
 
-pthread_cond_t FPlayer::c_cond;
-pthread_mutex_t FPlayer::c_mutex;
+std::list<AVPacket *> audio_pkt_list;
+std::list<AVPacket *> video_pkt_list;
 
-std::list<AVPacket *> FPlayer::audio_pkt_list;
-std::list<AVPacket *> FPlayer::video_pkt_list;
+Clock master_clk;
 
-Clock FPlayer::master_clk;
-
-int FPlayer::open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
+int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                                 AVFormatContext *fmt_ctx, enum AVMediaType type) {
     int ret, stream_index;
     AVCodec *dec = NULL;
@@ -59,7 +63,7 @@ int FPlayer::open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
     return 0;
 }
 
-double FPlayer::get_master_clock() {
+double get_master_clock() {
     double time = av_gettime_relative() / 1000.0;
     if (master_clk.last_updated == 0) {
         master_clk.last_updated = time;
@@ -67,7 +71,7 @@ double FPlayer::get_master_clock() {
     return time - master_clk.last_updated; // ms
 }
 
-void FPlayer::decode_packet(AVPacket *pkt, bool clear_cache) {
+void decode_packet(AVPacket *pkt, bool clear_cache) {
     const char *stream_id = "-";
     if (clear_cache) {
         pkt->data = NULL;
@@ -104,46 +108,4 @@ void FPlayer::decode_packet(AVPacket *pkt, bool clear_cache) {
         }
     }
     pthread_mutex_unlock(&c_mutex);
-}
-
-void FPlayer::startPlayer(const char *src_filename, ANativeWindow *window) {
-    AVPacket pkt;
-    Audio audio;
-    Video video;
-
-    /* open input file, and allocate format context */
-    if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
-        LOGI("Could not open source file %s", src_filename);
-        exit(1);
-    }
-    /* retrieve stream information */
-    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
-        LOGI("Could not find stream information");
-        exit(1);
-    }
-
-    pthread_mutex_init(&c_mutex, NULL);
-    pthread_cond_init(&c_cond, NULL);
-    // ->>
-    if (audio.open_stream() < 0 && video.open_stream(window) < 0) {
-        LOGI("Could not find audio or video stream in the input, aborting");
-        goto end;
-    }
-
-    av_init_packet(&pkt);
-    pkt.data = NULL;
-    pkt.size = 0;
-    while (av_read_frame(fmt_ctx, &pkt) >= 0) {
-        decode_packet(&pkt, false);
-    }
-    LOGI("flush cached frames.");
-    decode_packet(&pkt, true);
-    LOGI("Demuxing succeeded.");
-    end:
-    //
-    audio.release();
-    video.release();
-    avformat_close_input(&fmt_ctx);
-    pthread_cond_destroy(&c_cond);
-    pthread_mutex_destroy(&c_mutex);
 }
