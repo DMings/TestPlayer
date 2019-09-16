@@ -32,6 +32,7 @@ int startPlayer(const char *src_filename, ANativeWindow *window) {
         pkt.data = NULL;
         pkt.size = 0;
         while (av_read_frame(fmt_ctx, &pkt) >= 0) {
+            seek_frame_if_need();
             decode_packet(&pkt, false);
         }
         LOGI("flush cached frames.");

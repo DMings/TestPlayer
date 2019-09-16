@@ -8,24 +8,23 @@ int Video::synchronize_video(double pkt_duration) { // us
     double wanted_delay = -1;
     double diff_ms;
     double duration;
-    int video_base = (int) av_q2d(video_stream->r_frame_rate) * 1000;
+    AVRational rational = video_stream->r_frame_rate;
+    int video_base = (int) 1000.0 * rational.den / rational.num;
     if (video_base) {
         duration = video_base;
     } else {
         duration = pkt_duration;
     }
     duration = duration < 200 ? duration : 200;
-//    pthread_mutex_lock(&c_mutex);
-    if (!video_packet->no_checkout_time) {
+    if (!want_audio_seek && !check_video_is_seek()) {
         if (audio_stream_id != -1) {
             diff_ms = get_video_pts_clock() - get_audio_clock();
         } else {
             diff_ms = get_video_pts_clock() - get_master_clock();
         }
-    }else {
-        diff_ms = duration;
+    } else {
+        diff_ms = duration * 0.8;
     }
-//    pthread_mutex_unlock(&c_mutex);
     if (diff_ms < 0) { // 视频落后时间
         if (duration > 0 && wanted_delay < duration * 0.3) {
             wanted_delay = 0;
@@ -71,52 +70,55 @@ void *Video::videoProcess(void *arg) {
             pthread_mutex_lock(&c_mutex);
             av_packet_free(&video_packet->avPacket);
             free_packet(video_packet);
+            video_packet = NULL;
             pthread_mutex_unlock(&c_mutex);
             continue;
         }
-//        if (!check_video_is_seek()) {
-            while (ret >= 0) {
-                ret = avcodec_receive_frame(video->video_dec_ctx, frame);
-                if (ret == AVERROR(EAGAIN)) {
+        while (ret >= 0) {
+            ret = avcodec_receive_frame(video->video_dec_ctx, frame);
+            if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
-                    break;
-                } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) || ret == AVERROR_INPUT_CHANGED) {
-                    LOGE("video some err!");
-                    break;
-                } else if (ret < 0) {
-                    LOGE("video legitimate decoding errors");
-                    break;
-                }
-                //  用 st 上的时基才对 video_stream
-                double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
-                double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration *
-                                                 1000.0); // ms
-                ret = sws_scale(video->sws_context,
-                                (const uint8_t *const *) frame->data, frame->linesize,
-                                0, video->video_dec_ctx->height,
-                                video->dst_data, video->dst_line_size);
-                LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
-                     get_audio_clock(),
-                     get_master_clock(),
-                     pkt_duration);
-                set_video_clock(pts);
-                int delay = video->synchronize_video(pkt_duration); // ms
+                break;
+            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) || ret == AVERROR_INPUT_CHANGED) {
+                LOGE("video some err!");
+                break;
+            } else if (ret < 0) {
+                LOGE("video legitimate decoding errors");
+                break;
+            }
+            if (check_video_is_seek()) {
+                continue;
+            }
+            //  用 st 上的时基才对 video_stream
+            double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
+            double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
+            ret = sws_scale(video->sws_context,
+                            (const uint8_t *const *) frame->data, frame->linesize,
+                            0, video->video_dec_ctx->height,
+                            video->dst_data, video->dst_line_size);
+            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
+                 get_audio_clock(),
+                 get_master_clock(),
+                 pkt_duration);
+            set_video_clock(pts);
+            int delay = video->synchronize_video(pkt_duration); // ms
 //            LOGI("video show-> width: %d height: %d pts: %f delay: %f pkt_duration: %f", frame->width, frame->height,
 //                 pts, delay, pkt_duration);
-                if (delay >= 0) {
-                    av_usleep((uint) delay * 1000); // us
-                    LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
-                         (get_master_clock() - video->test_video_time));
-                } else {
-                    LOGI("video delay->skip get_master_clock: %f video_time: %f", get_master_clock(),
-                         (get_master_clock() - video->test_video_time));
-                }
-                video->test_video_time = get_master_clock();
-//            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
-                video->openGL.draw(video->dst_data[0]);
-//            env->CallVoidMethod(updateObject, updateMethod);
+            LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
+                 (get_master_clock() - video->test_video_time));
+            if (delay >= 0) {
+                av_usleep((uint) delay * 1000); // us
+//                LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
+//                     (get_master_clock() - video->test_video_time));
+            } else {
+//                LOGI("video delay->skip get_master_clock: %f video_time: %f", get_master_clock(),
+//                     (get_master_clock() - video->test_video_time));
             }
-//        }
+            video->test_video_time = get_master_clock();
+//            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
+            video->openGL.draw(video->dst_data[0]);
+//            env->CallVoidMethod(updateObject, updateMethod);
+        }
         pthread_mutex_lock(&c_mutex);
         av_packet_free(&video_packet->avPacket);
         free_packet(video_packet);

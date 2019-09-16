@@ -31,6 +31,8 @@ bool want_audio_seek = false;
 bool want_video_seek = false;
 bool want_seek = false;
 
+double seek_time = 0;
+
 int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                        AVFormatContext *fmt_ctx, enum AVMediaType type) {
     int ret, stream_index;
@@ -129,30 +131,29 @@ void decode_packet(AVPacket *pkt, bool clear_cache) {
         AVPacket *pkg = av_packet_clone(pkt);
         FPacket *fPacket = alloc_packet();
         pthread_mutex_lock(&c_mutex);
-        copy_pkg = NULL;
-        if (want_seek) {
-            want_seek = false;
-            if (pkg) {
-                av_packet_free(&pkg);
-                free_packet(fPacket);
-            }
-        } else {
-            fPacket->avPacket = pkg;
-            copy_pkg = fPacket;
-            if (want_audio_seek && pkt->stream_index == audio_stream_id) { //
-                copy_pkg->no_checkout_time = true;
-                want_audio_seek = false;
-            } else if (want_video_seek && pkt->stream_index == audio_stream_id) { // 等待音频校准
-                if (!want_audio_seek) { //当音频校准的时候,结束无校准状态
-                    want_video_seek = false;
-                } else {
-                    copy_pkg->no_checkout_time = true; // 使用无校准时基
-                }
-            }
+        fPacket->avPacket = pkg;
+        copy_pkg = fPacket;
+        if (want_audio_seek && want_video_seek && pkt->stream_index == audio_stream_id) { //
+            want_video_seek = false;
+            copy_pkg->checkout_time = true;
         }
+//        else if (want_video_seek && pkt->stream_index == audio_stream_id) { // 等待音频校准
+//            if (!want_audio_seek) { //当音频校准的时候,结束无校准状态
+//                want_video_seek = false;
+//            } else {
+//                copy_pkg->checkout_time = true; // 使用无校准时基
+//            }
+//        }
         pthread_mutex_unlock(&c_mutex);
     }
     pthread_mutex_lock(&c_mutex);
+    if(want_seek){
+        if (copy_pkg) {
+            av_packet_free(&copy_pkg->avPacket);
+            free_packet(copy_pkg);
+            copy_pkg = NULL;
+        }
+    }
     if (copy_pkg != NULL) {
         //
         if (pkt->stream_index == video_stream_id) {
@@ -160,6 +161,7 @@ void decode_packet(AVPacket *pkt, bool clear_cache) {
         } else if (pkt->stream_index == audio_stream_id) {
             audio_pkt_list.push_back(copy_pkg);
         }
+        copy_pkg = NULL;
         //
         pthread_cond_broadcast(&c_cond);
         if (video_stream_id != -1 && audio_stream_id != -1) {
@@ -170,7 +172,7 @@ void decode_packet(AVPacket *pkt, bool clear_cache) {
             if (video_pkt_list.size() >= 2) {
                 pthread_cond_wait(&c_cond, &c_mutex);
             }
-        }else if (audio_stream_id != -1) {
+        } else if (audio_stream_id != -1) {
             if (audio_pkt_list.size() >= 1) {
                 pthread_cond_wait(&c_cond, &c_mutex);
             }
@@ -181,7 +183,10 @@ void decode_packet(AVPacket *pkt, bool clear_cache) {
 }
 
 FPacket *alloc_packet() {
-    return (struct FPacket *) malloc(sizeof(struct FPacket));
+    FPacket *packet = (struct FPacket *) malloc(sizeof(struct FPacket));
+    packet->checkout_time = false;
+    packet->is_seek = false;
+    return packet;
 }
 
 void free_packet(FPacket *packet) {
@@ -222,17 +227,23 @@ bool check_audio_is_seek() {
     return b;
 }
 
+void seek_frame_if_need() {
+    pthread_mutex_lock(&c_mutex);
+    if (want_seek) {
+        want_seek = false;
+        want_audio_seek = true;
+        want_video_seek = true;
+        set_master_clock(seek_time);
+        av_seek_frame(fmt_ctx, AVMEDIA_TYPE_UNKNOWN, (int64_t) (seek_time),
+                      AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+    }
+    pthread_mutex_unlock(&c_mutex);
+}
+
 void seek_frame(float percent) {
     if (video_stream_id != -1 || audio_stream_id != -1) {
         pthread_mutex_lock(&c_mutex);
-        if (copy_pkg) {
-            av_packet_free(&copy_pkg->avPacket);
-            free_packet(copy_pkg);
-            copy_pkg = NULL;
-        }
         want_seek = true;
-        want_audio_seek = true;
-        want_video_seek = true;
         clearAllList();
         if (audio_packet != NULL) {
             audio_packet->is_seek = true;
@@ -240,10 +251,7 @@ void seek_frame(float percent) {
         if (video_packet != NULL) {
             video_packet->is_seek = true;
         }
-        double time = percent * fmt_ctx->duration;
-        set_master_clock(time);
-        av_seek_frame(fmt_ctx, AVMEDIA_TYPE_UNKNOWN, (int64_t) (time),
-                      AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+        seek_time = percent * fmt_ctx->duration;
         pthread_mutex_unlock(&c_mutex);
     }
 }

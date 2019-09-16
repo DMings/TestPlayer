@@ -32,7 +32,7 @@ struct Clock {
 struct FPacket{
     AVPacket* avPacket;
     bool is_seek;
-    bool no_checkout_time;
+    bool checkout_time;
 };
 
 extern FPacket* alloc_packet();
@@ -83,5 +83,10 @@ extern void decode_packet(AVPacket *pkt, bool clear_cache);
 extern FPacket *audio_packet;
 
 extern FPacket *video_packet;
+
+extern bool want_audio_seek;
+extern bool want_video_seek;
+
+extern void seek_frame_if_need();
 
 #endif //TESTPLAYER_FFAV_H
