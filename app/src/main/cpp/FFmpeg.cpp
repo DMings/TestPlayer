@@ -122,11 +122,8 @@ void set_audio_clock(double pts) {
     audio_clk.last_updated = time;
 }
 
-void decode_packet(AVPacket *pkt, bool clear_cache) {
-    if (clear_cache) {
-        pkt->data = NULL;
-        pkt->size = 0;
-    }
+void decode_packet(AVPacket *pkt) {
+//    LOGE("seek_frame111");
     if (pkt->stream_index == video_stream_id || pkt->stream_index == audio_stream_id) {
         AVPacket *pkg = av_packet_clone(pkt);
         FPacket *fPacket = alloc_packet();
@@ -146,6 +143,7 @@ void decode_packet(AVPacket *pkt, bool clear_cache) {
 //        }
         pthread_mutex_unlock(&c_mutex);
     }
+//    LOGE("seek_frame222 audio: %d video: %d copy_pkg:%d",(pkt->stream_index == audio_stream_id),(pkt->stream_index == video_stream_id),copy_pkg);
     pthread_mutex_lock(&c_mutex);
     if(want_seek){
         if (copy_pkg) {
@@ -227,9 +225,13 @@ bool check_audio_is_seek() {
     return b;
 }
 
-void seek_frame_if_need() {
+void seek_frame_if_need(AVPacket *pkt) {
     pthread_mutex_lock(&c_mutex);
     if (want_seek) {
+        pkt->data = NULL;
+        pkt->size = 0;
+        av_read_frame(fmt_ctx, pkt);
+//        LOGE("seek_frame_if_need<<<<<<<<<<");
         want_seek = false;
         want_audio_seek = true;
         want_video_seek = true;
@@ -243,6 +245,7 @@ void seek_frame_if_need() {
 void seek_frame(float percent) {
     if (video_stream_id != -1 || audio_stream_id != -1) {
         pthread_mutex_lock(&c_mutex);
+//        LOGE("seek_frame-------------------------------------------------->");
         want_seek = true;
         clearAllList();
         if (audio_packet != NULL) {

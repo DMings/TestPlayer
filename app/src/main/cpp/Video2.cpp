@@ -32,6 +32,9 @@ int Video::synchronize_video(double pkt_duration) { // us
     } else { // 视频超过时间
         wanted_delay = diff_ms;
     }
+//    if(wanted_delay > duration){
+//        wanted_delay = duration;
+//    }
 //    LOGI("video diff_ms: %f wanted_delay: %f pkt_duration: %f get_video_pts_clock: %f", diff_ms, wanted_delay,pkt_duration,get_video_pts_clock());
     return (uint) wanted_delay;
 }
@@ -63,6 +66,7 @@ void *Video::videoProcess(void *arg) {
             }
             pthread_mutex_unlock(&c_mutex);
         } while (video_packet == NULL);
+//        LOGE("video copy_pkg:%d",video_packet);
         // 解码
         ret = avcodec_send_packet(video->video_dec_ctx, video_packet->avPacket);
         if (ret < 0) {
@@ -87,6 +91,7 @@ void *Video::videoProcess(void *arg) {
                 break;
             }
             if (check_video_is_seek()) {
+//                LOGE("check_video_is_seek copy_pkg:%d",video_packet);
                 continue;
             }
             //  用 st 上的时基才对 video_stream
@@ -96,10 +101,10 @@ void *Video::videoProcess(void *arg) {
                             (const uint8_t *const *) frame->data, frame->linesize,
                             0, video->video_dec_ctx->height,
                             video->dst_data, video->dst_line_size);
-            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
-                 get_audio_clock(),
-                 get_master_clock(),
-                 pkt_duration);
+//            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
+//                 get_audio_clock(),
+//                 get_master_clock(),
+//                 pkt_duration);
             set_video_clock(pts);
             int delay = video->synchronize_video(pkt_duration); // ms
 //            LOGI("video show-> width: %d height: %d pts: %f delay: %f pkt_duration: %f", frame->width, frame->height,

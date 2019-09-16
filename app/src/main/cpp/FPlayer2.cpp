@@ -32,11 +32,13 @@ int startPlayer(const char *src_filename, ANativeWindow *window) {
         pkt.data = NULL;
         pkt.size = 0;
         while (av_read_frame(fmt_ctx, &pkt) >= 0) {
-            seek_frame_if_need();
-            decode_packet(&pkt, false);
+            seek_frame_if_need(&pkt);
+            decode_packet(&pkt);
         }
         LOGI("flush cached frames.");
-        decode_packet(&pkt, true);
+        pkt.data = NULL;
+        pkt.size = 0;
+        av_read_frame(fmt_ctx, &pkt);
         LOGI("Demuxing succeeded.");
     } else {
         LOGE("Could not find audio or video stream in the input, aborting");

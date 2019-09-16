@@ -78,7 +78,7 @@ extern bool check_video_is_seek();
 
 extern bool check_audio_is_seek();
 
-extern void decode_packet(AVPacket *pkt, bool clear_cache);
+extern void decode_packet(AVPacket *pkt);
 
 extern FPacket *audio_packet;
 
@@ -87,6 +87,6 @@ extern FPacket *video_packet;
 extern bool want_audio_seek;
 extern bool want_video_seek;
 
-extern void seek_frame_if_need();
+extern void seek_frame_if_need(AVPacket *pkt);
 
 #endif //TESTPLAYER_FFAV_H
