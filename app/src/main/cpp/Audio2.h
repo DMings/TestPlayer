@@ -11,12 +11,6 @@
 
 class Audio {
 public:
-    static double get_audio_clock();
-
-    static double get_audio_pts_clock();
-
-    static void set_audio_clock(double pts);
-
     int synchronize_audio(int nb_samples);
 
     static void slBufferCallback();
@@ -33,7 +27,6 @@ private:
     static Clock audio_clk;
 
     static void *audioProcess(void *arg);
-    AVStream *audio_stream = NULL;
     AVCodecContext *audio_dec_ctx = NULL;
     OpenSL openSL;
     SwrContext *swr_context;

@@ -4,10 +4,6 @@
 
 #include "FFmpeg.h"
 
-//
-// Created by Administrator on 2019/9/12.
-//
-
 AVFormatContext *fmt_ctx = NULL;
 
 int video_stream_id = -1;
@@ -16,13 +12,27 @@ int audio_stream_id = -1;
 pthread_cond_t c_cond;
 pthread_mutex_t c_mutex;
 
-std::list<AVPacket *> audio_pkt_list;
-std::list<AVPacket *> video_pkt_list;
+std::list<FPacket *> audio_pkt_list;
+std::list<FPacket *> video_pkt_list;
 
-Clock master_clk;
+Clock master_clk = {0};
+Clock video_clk = {0};
+Clock audio_clk = {0};
+
+FPacket *copy_pkg = NULL;
+
+AVStream *video_stream = NULL;
+AVStream *audio_stream = NULL;
+
+FPacket *audio_packet = NULL;
+FPacket *video_packet = NULL;
+
+bool want_audio_seek = false;
+bool want_video_seek = false;
+bool want_seek = false;
 
 int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
-                                AVFormatContext *fmt_ctx, enum AVMediaType type) {
+                       AVFormatContext *fmt_ctx, enum AVMediaType type) {
     int ret, stream_index;
     AVCodec *dec = NULL;
     AVDictionary *opts = NULL;
@@ -71,41 +81,169 @@ double get_master_clock() {
     return time - master_clk.last_updated; // ms
 }
 
+void set_master_clock(double time) {
+    master_clk.last_updated = time;
+}
+
+double get_video_pts_clock() {
+    return video_clk.pts; // ms
+}
+
+void set_video_clock(double pts) {
+    double time = av_gettime_relative() / 1000.0;
+    video_clk.pts = pts; // ms
+    video_clk.last_updated = time;
+}
+
+double get_video_clock() {
+    return video_clk.pts; // ms
+}
+
+double get_audio_clock() {
+    if (audio_clk.pts == 0) {
+        return 0;
+    }
+    double time = av_gettime_relative() / 1000.0;
+    if (audio_clk.last_updated == 0) {
+        audio_clk.last_updated = time;
+    }
+    return audio_clk.pts + (time - audio_clk.last_updated); // ms
+}
+
+double get_audio_pts_clock() {
+    return audio_clk.pts; // ms
+}
+
+void set_audio_clock(double pts) {
+    double time = av_gettime_relative() / 1000.0;
+    audio_clk.pts = pts; // ms
+    audio_clk.last_updated = time;
+}
+
 void decode_packet(AVPacket *pkt, bool clear_cache) {
-    const char *stream_id = "-";
     if (clear_cache) {
         pkt->data = NULL;
         pkt->size = 0;
     }
-    if (pkt->stream_index == video_stream_id) {
-        stream_id = "video";
-        AVPacket *copy_pkg = av_packet_clone(pkt);
-        if (copy_pkg != NULL) {
-            video_pkt_list.push_back(copy_pkg);
+    if (pkt->stream_index == video_stream_id || pkt->stream_index == audio_stream_id) {
+        AVPacket *pkg = av_packet_clone(pkt);
+        FPacket *fPacket = alloc_packet();
+        pthread_mutex_lock(&c_mutex);
+        copy_pkg = NULL;
+        if (want_seek) {
+            want_seek = false;
+            if (pkg) {
+                av_packet_free(&pkg);
+                free_packet(fPacket);
+            }
+        } else {
+            fPacket->avPacket = pkg;
+            copy_pkg = fPacket;
+            if (want_audio_seek && pkt->stream_index == audio_stream_id) { //
+                copy_pkg->no_checkout_time = true;
+                want_audio_seek = false;
+            } else if (want_video_seek && pkt->stream_index == audio_stream_id) { // 等待音频校准
+                if (!want_audio_seek) { //当音频校准的时候,结束无校准状态
+                    want_video_seek = false;
+                } else {
+                    copy_pkg->no_checkout_time = true; // 使用无校准时基
+                }
+            }
         }
-    } else if (pkt->stream_index == audio_stream_id) {
-        stream_id = "audio";
-        AVPacket *copy_pkg = av_packet_clone(pkt);
-        if (copy_pkg != NULL) {
+        pthread_mutex_unlock(&c_mutex);
+    }
+    pthread_mutex_lock(&c_mutex);
+    if (copy_pkg != NULL) {
+        //
+        if (pkt->stream_index == video_stream_id) {
+            video_pkt_list.push_back(copy_pkg);
+        } else if (pkt->stream_index == audio_stream_id) {
             audio_pkt_list.push_back(copy_pkg);
         }
-    }
-    LOGI("stream_id ->: %s", stream_id)
-    pthread_mutex_lock(&c_mutex);
-    pthread_cond_broadcast(&c_cond);
-    if (video_stream_id != -1 && audio_stream_id != -1) {
-        if (video_pkt_list.size() >= 2 && audio_pkt_list.size() >= 1) {
-            pthread_cond_wait(&c_cond, &c_mutex);
-        }
-    } else if (video_stream_id != -1) {
-        if (video_pkt_list.size() >= 2) {
-            pthread_cond_wait(&c_cond, &c_mutex);
-        }
-    }
-    if (audio_stream_id != -1) {
-        if (audio_pkt_list.size() >= 1) {
-            pthread_cond_wait(&c_cond, &c_mutex);
+        //
+        pthread_cond_broadcast(&c_cond);
+        if (video_stream_id != -1 && audio_stream_id != -1) {
+            if (video_pkt_list.size() >= 2 && audio_pkt_list.size() >= 1) {
+                pthread_cond_wait(&c_cond, &c_mutex);
+            }
+        } else if (video_stream_id != -1) {
+            if (video_pkt_list.size() >= 2) {
+                pthread_cond_wait(&c_cond, &c_mutex);
+            }
+        }else if (audio_stream_id != -1) {
+            if (audio_pkt_list.size() >= 1) {
+                pthread_cond_wait(&c_cond, &c_mutex);
+            }
         }
     }
     pthread_mutex_unlock(&c_mutex);
+
+}
+
+FPacket *alloc_packet() {
+    return (struct FPacket *) malloc(sizeof(struct FPacket));
+}
+
+void free_packet(FPacket *packet) {
+    free(packet);
+}
+
+void clearAllList() {
+    std::list<FPacket *>::iterator it;
+    for (it = audio_pkt_list.begin(); it != audio_pkt_list.end();) {
+        av_packet_free(&(*it)->avPacket);
+        free_packet(*it);
+        audio_pkt_list.erase(it++);
+    }
+    for (it = video_pkt_list.begin(); it != video_pkt_list.end();) {
+        av_packet_free(&(*it)->avPacket);
+        free_packet(*it);
+        video_pkt_list.erase(it++);
+    }
+}
+
+bool check_video_is_seek() {
+    bool b = false;
+    pthread_mutex_lock(&c_mutex);
+    if (video_packet != NULL) {
+        b = video_packet->is_seek;
+    }
+    pthread_mutex_unlock(&c_mutex);
+    return b;
+}
+
+bool check_audio_is_seek() {
+    bool b = false;
+    pthread_mutex_lock(&c_mutex);
+    if (audio_packet != NULL) {
+        b = audio_packet->is_seek;
+    }
+    pthread_mutex_unlock(&c_mutex);
+    return b;
+}
+
+void seek_frame(float percent) {
+    if (video_stream_id != -1 || audio_stream_id != -1) {
+        pthread_mutex_lock(&c_mutex);
+        if (copy_pkg) {
+            av_packet_free(&copy_pkg->avPacket);
+            free_packet(copy_pkg);
+            copy_pkg = NULL;
+        }
+        want_seek = true;
+        want_audio_seek = true;
+        want_video_seek = true;
+        clearAllList();
+        if (audio_packet != NULL) {
+            audio_packet->is_seek = true;
+        }
+        if (video_packet != NULL) {
+            video_packet->is_seek = true;
+        }
+        double time = percent * fmt_ctx->duration;
+        set_master_clock(time);
+        av_seek_frame(fmt_ctx, AVMEDIA_TYPE_UNKNOWN, (int64_t) (time),
+                      AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+        pthread_mutex_unlock(&c_mutex);
+    }
 }

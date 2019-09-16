@@ -29,28 +29,59 @@ struct Clock {
     double last_updated;
 };
 
-extern void startPlayer(const char *src_filename, ANativeWindow *window);
+struct FPacket{
+    AVPacket* avPacket;
+    bool is_seek;
+    bool no_checkout_time;
+};
+
+extern FPacket* alloc_packet();
+
+extern void free_packet(FPacket* packet);
+
+extern int startPlayer(const char *src_filename, ANativeWindow *window);
 
 extern int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                               AVFormatContext *fmt_ctx, AVMediaType type);
 
 extern double get_master_clock();
 
+extern double get_video_pts_clock();
+
+extern void set_video_clock(double pts);
+
+extern double get_video_clock();
+
+extern double get_audio_clock();
+
+extern double get_audio_pts_clock();
+
+extern void set_audio_clock(double pts);
+
+extern void seek_frame(float percent);
+
 extern AVFormatContext *fmt_ctx;
 
 extern int video_stream_id;
 extern int audio_stream_id;
 
+extern AVStream *video_stream;
+extern AVStream *audio_stream;
+
 extern pthread_cond_t c_cond;
 extern pthread_mutex_t c_mutex;
 
-extern std::list<AVPacket *> audio_pkt_list;
-extern std::list<AVPacket *> video_pkt_list;
+extern std::list<FPacket *> audio_pkt_list;
+extern std::list<FPacket *> video_pkt_list;
 
+extern bool check_video_is_seek();
+
+extern bool check_audio_is_seek();
 
 extern void decode_packet(AVPacket *pkt, bool clear_cache);
 
-extern Clock master_clk;
+extern FPacket *audio_packet;
 
+extern FPacket *video_packet;
 
 #endif //TESTPLAYER_FFAV_H

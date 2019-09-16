@@ -33,3 +33,11 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
 //    jvm = NULL;
     LOGE("JNI_OnUnload");
 }
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_seek(JNIEnv *env, jobject instance, jfloat percent) {
+    LOGE("percent: %f",percent);
+    seek_frame(percent);
+
+}

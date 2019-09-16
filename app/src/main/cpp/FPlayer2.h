@@ -8,6 +8,6 @@
 #include "Audio2.h"
 #include "Video2.h"
 
-extern void decode_packet(AVPacket *pkt, bool clear_cache);
+extern int startPlayer(const char *src_filename, ANativeWindow *window);
 
 #endif //TESTPLAYER_FFUTILS_H

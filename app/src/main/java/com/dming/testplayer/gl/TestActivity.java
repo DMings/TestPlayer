@@ -3,14 +3,11 @@ package com.dming.testplayer.gl;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.Nullable;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.View;
-import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import com.dming.testplayer.R;
 
 import java.io.File;
@@ -24,13 +21,17 @@ public class TestActivity extends AppCompatActivity {
 
     private Surface mSurface;
     private SurfaceView mSurfaceView;
+    private SeekBar mSeekBar;
 
     private native void testFF(String path, Surface surface);
+
+    private native void seek(float percent);
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.act_test);
+        mSeekBar = findViewById(R.id.test_sb);
         mSurfaceView = findViewById(R.id.sv_test);
         findViewById(R.id.btn_test_1).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -53,6 +54,22 @@ public class TestActivity extends AppCompatActivity {
             }
         });
 
+        mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                seek(1.0f * seekBar.getProgress() / seekBar.getMax());
+            }
+        });
     }
 
     @Override
