@@ -2,6 +2,6 @@ package com.dming.testplayer.gl;
 
 public interface OnProgressListener {
 
-    void onProgress(float percent);
+    void onProgress(long curTime,long totalTime);
 
 }

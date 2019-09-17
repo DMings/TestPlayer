@@ -5,11 +5,26 @@
 #include "FPlayer2.h"
 
 Video *video = NULL;
+int64_t ff_time = 0; // 当前时间
+int64_t ff_duration = 0; // 总时间
+
+void update_time(AVPacket *pkt, JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
+    if (audio_stream_id == -1 && pkt->stream_index == video_stream_id) {
+        ff_time = (int64_t) (av_q2d(video_stream->time_base) * pkt->pts);
+        env->CallVoidMethod(onProgressListener, onProgress, ff_time, ff_duration);
+    } else if (pkt->stream_index == audio_stream_id) {
+        ff_time = (int64_t) (av_q2d(audio_stream->time_base) * pkt->pts);
+        env->CallVoidMethod(onProgressListener, onProgress, ff_time, ff_duration);
+    }
+}
 
 int start_player(const char *src_filename, ANativeWindow *window, JNIEnv *env, jobject onProgressListener,
                  jmethodID onProgress) {
     int ret = 0;
     bool cr;
+    if (video_stream_id != -1 || audio_stream_id != -1) {
+        return -3;
+    }
     AVPacket *pkt = av_packet_alloc();
     video = new Video();
 //    Audio audio;
@@ -29,6 +44,10 @@ int start_player(const char *src_filename, ANativeWindow *window, JNIEnv *env, j
     //
     ff_init();
     // ->>
+    ff_duration = fmt_ctx->duration / AV_TIME_BASE;
+    if(ff_duration <= 0){
+        ff_duration = AV_TIME_BASE;
+    }
     int video_ret = video->open_stream(window);
 //    int video_ret = 1;
 //    int audio_ret = audio.open_stream();
@@ -46,17 +65,7 @@ int start_player(const char *src_filename, ANativeWindow *window, JNIEnv *env, j
             }
             seek_frame_if_need(pkt);
             ret = av_read_frame(fmt_ctx, pkt);
-
-            if (pkt->stream_index == video_stream_id) {
-                double pts = (int64_t) (av_q2d(video_stream->time_base) * pkt->pts * 1000.0); // ms
-//                float percent = pts /
-                env->CallVoidMethod(onProgressListener, onProgress,0.8);
-//        LOGE("seek_frame_if_need video>>%f",pts);
-            } else if (pkt->stream_index == audio_stream_id) {
-                double pts = (int64_t) (av_q2d(audio_stream->time_base) * pkt->pts * 1000.0); // ms
-//        LOGE("seek_frame_if_need audio>>%f",pts);
-            }
-
+            update_time(pkt, env, onProgressListener, onProgress);
             decode_packet(pkt);
         } while (ret >= 0);
         LOGI("Demuxing succeeded.");
@@ -103,8 +112,10 @@ void update_surface(ANativeWindow *window) {
 }
 
 void release() {
-    resume();
-    pthread_mutex_lock(&c_mutex);
-    crash_error = true;
-    pthread_mutex_unlock(&c_mutex);
+    if (video_stream_id != -1 || audio_stream_id != -1) {
+        resume();
+        pthread_mutex_lock(&c_mutex);
+        crash_error = true;
+        pthread_mutex_unlock(&c_mutex);
+    }
 }

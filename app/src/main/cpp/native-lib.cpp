@@ -62,7 +62,7 @@ Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, js
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     const char *path = env->GetStringUTFChars(path_, NULL);
     jclass plClass = env->GetObjectClass(onProgressListener);
-    jmethodID onProgress = env->GetMethodID(plClass,"onProgress","(F)V");
+    jmethodID onProgress = env->GetMethodID(plClass,"onProgress","(JJ)V");
     start_player(path, window,env,onProgressListener,onProgress);
     env->ReleaseStringUTFChars(path_, path);
 }

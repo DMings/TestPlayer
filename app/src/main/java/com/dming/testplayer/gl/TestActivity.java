@@ -25,7 +25,7 @@ public class TestActivity extends AppCompatActivity {
     private SurfaceView mSurfaceView;
     private SeekBar mSeekBar;
 
-    private native void play(String path, Surface surface, OnProgressListener onProgressListener);
+    private native void play(String path, Surface surface,OnProgressListener onProgressListener);
 
     private native void seek(float percent);
 
@@ -49,15 +49,16 @@ public class TestActivity extends AppCompatActivity {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-//                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/video2.mp4").getPath();
-                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
+                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/video2.mp4").getPath();
+//                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
                         play(srcPath, mSurface, new OnProgressListener() {
                             @Override
-                            public void onProgress(final float percent) { // 0 - 1
+                            public void onProgress(final long curTime, final long totalTime) {
                                 runOnUiThread(new Runnable() {
                                     @Override
                                     public void run() {
-                                        mSeekBar.setProgress((int) (percent * 100));
+                                        Log.i("DMFF","curTime: "+curTime+ " totalTime: "+totalTime);
+                                        mSeekBar.setProgress((int) (100.0f * curTime / totalTime));
                                     }
                                 });
                             }
