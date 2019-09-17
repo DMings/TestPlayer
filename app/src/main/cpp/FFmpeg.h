@@ -39,8 +39,6 @@ extern FPacket* alloc_packet();
 
 extern void free_packet(FPacket* packet);
 
-extern int startPlayer(const char *src_filename, ANativeWindow *window);
-
 extern int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                               AVFormatContext *fmt_ctx, AVMediaType type);
 
@@ -71,7 +69,12 @@ extern AVStream *video_stream;
 extern AVStream *audio_stream;
 
 extern pthread_cond_t c_cond;
+extern pthread_cond_t video_cond;
 extern pthread_mutex_t c_mutex;
+extern pthread_mutex_t seek_mutex;
+// ???
+extern pthread_cond_t audio_cond;
+// ???
 
 extern std::list<FPacket *> audio_pkt_list;
 extern std::list<FPacket *> video_pkt_list;
@@ -93,5 +96,13 @@ extern void seek_frame_if_need(AVPacket *pkt);
 
 extern AVCodecContext *video_dec_ctx;
 extern AVCodecContext *audio_dec_ctx;
+
+extern bool crash_error;
+
+extern void clearAllList();
+
+extern void ff_release();
+
+extern void ff_init();
 
 #endif //TESTPLAYER_FFAV_H

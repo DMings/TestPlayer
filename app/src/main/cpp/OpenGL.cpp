@@ -12,7 +12,7 @@ OpenGL::~OpenGL() {
 
 }
 
-int OpenGL::init(ANativeWindow *surface,EGLContext eglContext, int width, int height) {
+int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext, int width, int height) {
     if (!surface) {
         return -1;
     }
@@ -54,7 +54,7 @@ int OpenGL::init(ANativeWindow *surface,EGLContext eglContext, int width, int he
         return -1;
     }
 
-    ANativeWindow_setBuffersGeometry(mWindow,width,height, WINDOW_FORMAT_RGBA_8888);
+    ANativeWindow_setBuffersGeometry(mWindow, width, height, WINDOW_FORMAT_RGBA_8888);
 
     EGLint context_attr[] = {
             EGL_CONTEXT_CLIENT_VERSION, 2,
@@ -75,12 +75,22 @@ int OpenGL::init(ANativeWindow *surface,EGLContext eglContext, int width, int he
     createTexture();
     float tr = mTexWidth * 1.0f / mTexHeight;
     float ratioY = (width / tr) / height;
-    LOGI("OpenGL init success: surface width %d, surface height %d ratioY:%f", width, height,ratioY);
-    glShape.init(ratioY);
+    LOGI("OpenGL init success: surface width %d, surface height %d ratioY:%f", width, height, ratioY);
+    glRender.init(ratioY);
+    isCreateEgl = true;
     return mTexture;
 }
 
+int OpenGL::updateEgl(ANativeWindow *surface) {
+    if (isCreateEgl) {
+        release();
+        return createEgl(surface, NULL, mTexWidth, mTexHeight);
+    }
+}
+
 void OpenGL::release() {
+    isCreateEgl = false;
+    deleteTexture();
     if (mEglDisplay != EGL_NO_DISPLAY) {
         eglMakeCurrent(mEglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (mEglContext != EGL_NO_CONTEXT) {
@@ -93,10 +103,12 @@ void OpenGL::release() {
             eglTerminate(mEglDisplay);
         }
     }
+    if (mWindow != NULL) {
+        ANativeWindow_release(mWindow);
+    }
     mEglDisplay = EGL_NO_DISPLAY;
     mEglContext = EGL_NO_CONTEXT;
     mEglSurface = EGL_NO_SURFACE;
-    ANativeWindow_release(mWindow);
     mWindow = NULL;
 }
 
@@ -115,13 +127,19 @@ void OpenGL::createTexture() {
     GLUtils::checkErr("createTexture");
 }
 
+void OpenGL::deleteTexture() {
+    glDeleteTextures(1, &mTexture);
+    glRender.release();
+    GLUtils::checkErr("createTexture");
+}
+
 void OpenGL::draw(void *pixels) {
     glClear(GL_COLOR_BUFFER_BIT);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mTexWidth, mTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glShape.onDraw(mTexture);
+    glRender.onDraw(mTexture);
     eglSwapBuffers(mEglDisplay, mEglSurface);
     GLUtils::checkErr("draw");
 }

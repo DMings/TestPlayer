@@ -5,16 +5,36 @@
 #include "log.h"
 #include "FPlayer2.h"
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_dming_testplayer_gl_TestActivity_testFF(
-        JNIEnv *env,
-        jobject, jstring path_, jobject surface) {
-    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    const char *path = env->GetStringUTFChars(path_, NULL);
-    startPlayer(path, window);
-    env->ReleaseStringUTFChars(path_, path);
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_seek(JNIEnv *env, jobject instance, jfloat percent) {
+    LOGE("percent: %f", percent);
+    seek(percent);
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_pause(JNIEnv *env, jobject instance) {
+    pause();
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_resume(JNIEnv *env, jobject instance) {
+    resume();
 }
 
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_update_1surface(JNIEnv *env, jobject instance,
+                                                   jobject surface) {
+    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+    update_surface(window);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_dming_testplayer_gl_TestActivity_release(JNIEnv *env, jobject instance) {
+    release();
+}
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 //    jvm = vm;
@@ -36,8 +56,13 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_dming_testplayer_gl_TestActivity_seek(JNIEnv *env, jobject instance, jfloat percent) {
-    LOGE("percent: %f",percent);
-    seek_frame(percent);
+Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,
+                                               jobject onProgressListener) {
 
+    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+    const char *path = env->GetStringUTFChars(path_, NULL);
+    jclass plClass = env->GetObjectClass(onProgressListener);
+    jmethodID onProgress = env->GetMethodID(plClass,"onProgress","(F)V");
+    start_player(path, window,env,onProgressListener,onProgress);
+    env->ReleaseStringUTFChars(path_, path);
 }

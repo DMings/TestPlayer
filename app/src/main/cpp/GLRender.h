@@ -11,10 +11,11 @@
 #include <jni.h>
 #include "GLUtils.h"
 
-class GLShape {
+class GLRender {
 public:
     void onDraw(GLuint texture);
     void init(float ratioY);
+    void release();
 
 private:
     GLuint mProgram;

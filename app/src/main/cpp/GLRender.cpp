@@ -48,7 +48,7 @@ static float model_matrix[] = {
         0, 0, 0, 1,
 };
 
-void GLShape::init(float ratioY) {
+void GLRender::init(float ratioY) {
     mProgram = GLUtils::createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     mPosition = (GLuint) glGetAttribLocation(mProgram, "inputPosition");
     mTextureCoordinate = (GLuint) glGetAttribLocation(mProgram, "inputTextureCoordinate");
@@ -58,7 +58,7 @@ void GLShape::init(float ratioY) {
 }
 
 
-void GLShape::onDraw(GLuint texture) {
+void GLRender::onDraw(GLuint texture) {
     glUseProgram(mProgram);
     glEnableVertexAttribArray(mPosition);
     glVertexAttribPointer(mPosition, 3, GL_FLOAT, 0, 0, VERTEX_POS);
@@ -74,6 +74,10 @@ void GLShape::onDraw(GLuint texture) {
     glDisableVertexAttribArray(mPosition);
     glDisableVertexAttribArray(mTextureCoordinate);
     glUseProgram(0);
+}
+
+void GLRender::release(){
+    glDeleteProgram(mProgram);
 }
 
 

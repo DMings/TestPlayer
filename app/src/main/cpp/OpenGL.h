@@ -16,11 +16,12 @@ class OpenGL {
 public:
     OpenGL();
     ~OpenGL();
-    int init(ANativeWindow * surface,EGLContext eglContext,int width,int height);
+    int createEgl(ANativeWindow * surface,EGLContext eglContext,int width,int height);
+    int updateEgl(ANativeWindow * surface);
     void draw(void *pixels);
     void release();
 private:
-    GLShape glShape;
+    GLRender glRender;
     ANativeWindow * mWindow;
     EGLDisplay mEglDisplay;
     EGLContext mEglContext;
@@ -28,7 +29,9 @@ private:
     GLuint mTexture = 0;
     int mTexWidth;
     int mTexHeight;
+    bool isCreateEgl = false;
     void createTexture();
+    void deleteTexture();
 };
 
 

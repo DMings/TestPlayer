@@ -7,12 +7,19 @@
 
 #include "OpenGL.h"
 #include "Audio2.h"
+#include "AV.h"
 
-class Video {
+class Video : AV {
 public:
     int open_stream(ANativeWindow *window);
 
+    void pause();
+
+    void resume();
+
     void release();
+
+    void update_surface(ANativeWindow *window);
 
 private:
     static Clock video_clk;
@@ -22,7 +29,11 @@ private:
     uint8_t *dst_data[4];
     int dst_line_size[4];
     pthread_t p_video_tid;
-    bool thread_flag = true;
+    bool thread_finish = false;
+    bool is_pause = false;
+    pthread_cond_t pause_cond;
+    pthread_mutex_t pause_mutex;
+    bool will_update_surface = false;
     //test
     double test_video_time = 0;
 

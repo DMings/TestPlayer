@@ -10,12 +10,26 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center">
-
         <Button
                 android:id="@+id/btn_test_1"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="111"/>
+                android:text="start"/>
+        <Button
+                android:id="@+id/btn_test_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="pause"/>
+        <Button
+                android:id="@+id/btn_test_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="resume"/>
+        <Button
+                android:id="@+id/btn_test_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="release"/>
         <SeekBar
                 android:id="@+id/test_sb"
                 android:layout_marginTop="20dp"

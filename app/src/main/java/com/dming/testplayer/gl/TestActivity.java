@@ -4,7 +4,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.Surface;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.widget.SeekBar;
@@ -23,9 +25,17 @@ public class TestActivity extends AppCompatActivity {
     private SurfaceView mSurfaceView;
     private SeekBar mSeekBar;
 
-    private native void testFF(String path, Surface surface);
+    private native void play(String path, Surface surface, OnProgressListener onProgressListener);
 
     private native void seek(float percent);
+
+    private native void pause();
+
+    private native void resume();
+
+    private native void update_surface(Surface surface);
+
+    private native void release();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -36,21 +46,44 @@ public class TestActivity extends AppCompatActivity {
         findViewById(R.id.btn_test_1).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-//                FragmentManager fragmentManager = getSupportFragmentManager();
-//                FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
-//                fragmentTransaction.replace(R.id.ll_test,new TestFragment());
-//                fragmentTransaction.commit();
-
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
 //                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/video2.mp4").getPath();
                         String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
-                        mSurface = mSurfaceView.getHolder().getSurface();
-                        testFF(srcPath, mSurface);
+                        play(srcPath, mSurface, new OnProgressListener() {
+                            @Override
+                            public void onProgress(final float percent) { // 0 - 1
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mSeekBar.setProgress((int) (percent * 100));
+                                    }
+                                });
+                            }
+                        });
                     }
                 }).start();
+            }
+        });
+
+        findViewById(R.id.btn_test_2).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pause();
+            }
+        });
+
+        findViewById(R.id.btn_test_3).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                resume();
+            }
+        });
+        findViewById(R.id.btn_test_4).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                release();
             }
         });
 
@@ -70,6 +103,38 @@ public class TestActivity extends AppCompatActivity {
                 seek(1.0f * seekBar.getProgress() / seekBar.getMax());
             }
         });
+
+        mSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                Log.i("DMFF", "surfaceCreated");
+                mSurface = holder.getSurface();
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                Log.i("DMFF", "surfaceChanged");
+                mSurface = holder.getSurface();
+                update_surface(mSurface);
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                Log.i("DMFF", "surfaceDestroyed");
+            }
+        });
+    }
+
+    @Override
+    protected void onPause() {
+        pause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        resume();
+        super.onResume();
     }
 
     @Override
