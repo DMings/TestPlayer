@@ -25,9 +25,7 @@ public:
 
 private:
     static Clock audio_clk;
-
     static void *audioProcess(void *arg);
-    AVCodecContext *audio_dec_ctx = NULL;
     OpenSL openSL;
     SwrContext *swr_context;
     uint8_t *dst_data;

@@ -28,22 +28,30 @@
 
 static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGI("slBufferQueueCallback1 %ld====%d", pthread_self(), gettid());
+    SLuint32 pState;
     OpenSL *openSL = (OpenSL *) context;
-    openSL->slConfigure->signSlBufferCallback();
-    if (openSL->bufferSize) {
-        SLresult result = (*bq)->Enqueue(bq, openSL->buffer, openSL->bufferSize);
-    } else {
-        uint8_t b[] = {0};
-        SLresult result = (*bq)->Enqueue(bq, b, 1);
-        LOGI("OpenSL get empty buffer!!!");
+    (*openSL->bqPlayerPlay)->GetPlayState(openSL->bqPlayerPlay, &pState);
+    if (pState == SL_PLAYSTATE_PLAYING) {
+        openSL->slConfigure->signSlBufferCallback();
+        if (openSL->bufferSize) {
+            SLresult result = (*bq)->Enqueue(bq, openSL->buffer, openSL->bufferSize);
+        } else {
+            uint8_t b[] = {0};
+            SLresult result = (*bq)->Enqueue(bq, b, 1);
+            LOGI("OpenSL get empty buffer!!!");
+        }
+        openSL->bufferSize = 0;
+        openSL->buffer = NULL;
     }
-    openSL->bufferSize = 0;
-    openSL->buffer = NULL;
 }
 
 void OpenSL::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize) {
-    this->buffer = buffer;
-    this->bufferSize = bufferSize;
+    SLuint32 pState;
+    (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);
+    if (pState == SL_PLAYSTATE_PLAYING) {
+        this->buffer = buffer;
+        this->bufferSize = bufferSize;
+    }
 //    if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
 //        SLuint32 pState;
 //        (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);

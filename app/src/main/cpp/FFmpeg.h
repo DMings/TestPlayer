@@ -58,6 +58,8 @@ extern double get_audio_pts_clock();
 
 extern void set_audio_clock(double pts);
 
+extern void set_master_clock(double time);
+
 extern void seek_frame(float percent);
 
 extern AVFormatContext *fmt_ctx;
@@ -88,5 +90,8 @@ extern bool want_audio_seek;
 extern bool want_video_seek;
 
 extern void seek_frame_if_need(AVPacket *pkt);
+
+extern AVCodecContext *video_dec_ctx;
+extern AVCodecContext *audio_dec_ctx;
 
 #endif //TESTPLAYER_FFAV_H

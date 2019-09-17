@@ -16,7 +16,6 @@ public:
 
 private:
     static Clock video_clk;
-    AVCodecContext *video_dec_ctx = NULL;
     SwsContext *sws_context;
     ANativeWindow *mWindow;
     OpenGL openGL;

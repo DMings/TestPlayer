@@ -25,9 +25,9 @@ private:
     SLObjectItf outputMixObject = NULL;
     SLObjectItf bqPlayerObject = NULL;
     SLVolumeItf bqPlayerVolume = NULL;
-    SLPlayItf bqPlayerPlay = NULL;
     SLAndroidSimpleBufferQueueItf bqPlayerBufferQueue = NULL;
 public:
+    SLPlayItf bqPlayerPlay = NULL;
     uint8_t *buffer;
     uint32_t bufferSize;
     SLConfigure *slConfigure;

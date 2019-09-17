@@ -79,22 +79,21 @@ void *Audio::audioProcess(void *arg) {
                 }
             }
             pthread_mutex_unlock(&c_mutex);
-        } while (audio_packet == NULL);
-
+        } while (audio_packet == NULL && audio->thread_flag);
+        if(audio_packet == NULL){
+            break;
+        }
         // 解码
-        ret = avcodec_send_packet(audio->audio_dec_ctx, audio_packet->avPacket);
+        ret = avcodec_send_packet(audio_dec_ctx, audio_packet->avPacket);
         if (ret < 0) {
             LOGE("Error audio sending a packet for decoding");
-//            av_frame_free(&frame);
-            pthread_mutex_lock(&c_mutex);
-            av_packet_free(&audio_packet->avPacket);
-            free_packet(audio_packet);
-            audio_packet = NULL;
-            pthread_mutex_unlock(&c_mutex);
-            continue;
+            break;
+        }
+        if(audio_packet->checkout_time){ // 刷新
+            avcodec_flush_buffers(audio_dec_ctx);
         }
         while (ret >= 0) {
-            ret = avcodec_receive_frame(audio->audio_dec_ctx, frame);
+            ret = avcodec_receive_frame(audio_dec_ctx, frame);
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                 break;
@@ -109,7 +108,7 @@ void *Audio::audioProcess(void *arg) {
                 continue;
             }
             pthread_mutex_lock(&a_mutex);
-            if (!must_feed) {
+            if (!must_feed && audio->thread_flag) {
                 pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
             }
             must_feed = false;
@@ -118,7 +117,7 @@ void *Audio::audioProcess(void *arg) {
             double pts = av_q2d(audio_stream->time_base) * frame->pts * 1000.0;
             set_audio_clock(pts);// ms
             if(audio_packet->checkout_time){
-                LOGE("audio pts: checkout_time");
+                LOGE("audio pts: checkout_time------------");
                 want_audio_seek = false;
             }
             LOGI("audio pts: %f get_master_clock: %f", pts,
@@ -162,6 +161,7 @@ void *Audio::audioProcess(void *arg) {
         audio_packet = NULL;
         pthread_mutex_unlock(&c_mutex);
     }
+    LOGI("pthread_join return");
     av_frame_free(&frame);
     return 0;
 }
@@ -213,15 +213,26 @@ int Audio::open_stream() {
 
 void Audio::release() {
     if (audio_stream_id != -1) {
+        thread_flag = false;
+        LOGI("audio pthread_join wait");
+        pthread_mutex_lock(&a_mutex);
+        openSL.pause();
+        pthread_cond_broadcast(&a_cond);
+        pthread_mutex_unlock(&a_mutex);
+        pthread_mutex_lock(&c_mutex);
+        pthread_cond_broadcast(&c_cond);
+        pthread_mutex_unlock(&c_mutex);
         pthread_join(p_audio_tid, 0);
+        LOGI("audio pthread_join done");
         swr_free(&swr_context);
         av_freep(&dst_data);
     }
     if (audio_dec_ctx) {
         avcodec_free_context(&audio_dec_ctx);
     }
-    openSL.pause();
+    LOGI("audio openSL.release()");
     openSL.release();
     pthread_mutex_destroy(&a_mutex);
     pthread_cond_destroy(&a_cond);
+    LOGI("audio openSL.release()----");
 }
