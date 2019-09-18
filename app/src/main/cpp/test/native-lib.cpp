@@ -2,8 +2,8 @@
 #include <string>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
-#include "log.h"
-#include "FPlayer2.h"
+#include "../log.h"
+#include "../FPlayer2.h"
 
 extern "C"
 JNIEXPORT void JNICALL

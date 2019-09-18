@@ -1,4 +1,4 @@
-package com.dming.testplayer.gl;
+package com.dming.testplayer;
 
 public interface OnProgressListener {
 

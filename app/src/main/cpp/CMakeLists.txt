@@ -3,9 +3,10 @@ cmake_minimum_required(VERSION 3.4.1)
 set(ffmepg_src ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
 message("ffmepg_src:" ${ffmepg_src})
 
-add_library(native-lib
+add_library(
+        fplayer
         SHARED
-        native-lib.cpp
+#        native-lib.cpp
         OpenSL.cpp
         OpenGL.cpp
         GLRender.cpp
@@ -46,7 +47,7 @@ include_directories(${CMAKE_SOURCE_DIR}/ffmpeg/)
 #endif (${ANDROID_PLATFORM_LEVEL} LESS 11)
 
 target_link_libraries(
-        native-lib
+        fplayer
         swscale
         avformat
         swresample

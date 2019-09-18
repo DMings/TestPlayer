@@ -37,7 +37,7 @@ void update_java_time_init(JNIEnv *env, jobject onProgressListener, jmethodID on
 }
 
 int start_player(const char *src_filename, ANativeWindow *window,
-                 JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
+         JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
     int ret = 0;
     bool cr;
     if (video != NULL) {
@@ -142,7 +142,7 @@ void update_surface(ANativeWindow *window) {
 }
 
 void release() {
-    if (!crash_error && video_stream_id != -1 || audio_stream_id != -1) {
+    if (!crash_error && (video_stream_id != -1 || audio_stream_id != -1)) {
         resume();
         pthread_mutex_lock(&c_mutex);
         crash_error = true;
@@ -157,3 +157,97 @@ int64_t get_current_time() {
 int64_t get_duration_time() {
     return ff_sec_duration;
 }
+
+
+void play_jni(JNIEnv *env, jclass type, jstring path_, jobject surface, jobject onProgressListener) {
+    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+    const char *path = env->GetStringUTFChars(path_, NULL);
+    jclass plClass = env->GetObjectClass(onProgressListener);
+    jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(JJ)V");
+    start_player(path, window, env, onProgressListener, onProgress);
+    env->ReleaseStringUTFChars(path_, path);
+}
+
+void seek_jni(JNIEnv *env, jclass type, jfloat percent) {
+    LOGE("percent: %f", percent);
+    seek(percent);
+}
+
+void pause_jni(JNIEnv *env, jclass type) {
+    pause();
+}
+
+void resume_jni(JNIEnv *env, jclass type) {
+    resume();
+}
+
+void update_surface_jni(JNIEnv *env, jclass type, jobject surface) {
+    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+    update_surface(window);
+}
+
+void release_jni(JNIEnv *env, jclass type) {
+    release();
+}
+
+jlong get_current_time_jni(JNIEnv *env, jclass type) {
+    return get_current_time();
+}
+
+jlong get_duration_time_jni(JNIEnv *env, jclass type) {
+    return get_duration_time();
+}
+
+JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V", (void *) play_jni},
+                            {"seek",              "(F)V",                                                      (void *) seek_jni},
+                            {"pause",             "()V",                                                       (void *) pause_jni},
+                            {"resume",            "()V",                                                       (void *) resume_jni},
+                            {"update_surface",    "(Ljava/lang/Object;)V",                                     (void *) update_surface_jni},
+                            {"release",           "()V",                                                       (void *) release_jni},
+                            {"get_current_time",  "()J",                                                       (void *) get_current_time_jni},
+                            {"get_duration_time", "()J",                                                       (void *) get_duration_time_jni}
+};
+
+jint registerNativeMethod(JNIEnv *env) {
+    jclass cl = env->FindClass("com/dming/testplayer/FPlayer");
+    if ((env->RegisterNatives(cl, method, sizeof(method) / sizeof(method[0]))) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+jint unRegisterNativeMethod(JNIEnv *env) {
+    jclass cl = env->FindClass("com/dming/testplayer/FPlayer");
+    env->UnregisterNatives(cl);
+    return 0;
+}
+
+JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
+    native_jvm = vm;
+    LOGE("JNI_OnLoad");
+    JNIEnv *env;
+//    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
+//        registerNativeMethod(env);
+//        LOGE("JNI_OnLoad JNI_VERSION_1_6");
+//        return JNI_VERSION_1_6;
+//    } // JNI_VERSION_1_4;
+    if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
+        registerNativeMethod(env);
+        LOGE("JNI_OnLoad JNI_VERSION_1_4");
+        return JNI_VERSION_1_4;
+    }
+    return JNI_ERR;
+}
+
+JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
+    LOGE("JNI_OnUnload");
+    native_jvm = NULL;
+    JNIEnv *env;
+//    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
+//        unRegisterNativeMethod(env);
+//    } // JNI_VERSION_1_4;
+    if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
+        unRegisterNativeMethod(env);
+    }
+}
+

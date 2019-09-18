@@ -15,6 +15,8 @@ import android.view.View;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import com.dming.testplayer.DUtils;
+import com.dming.testplayer.FPlayer;
+import com.dming.testplayer.OnProgressListener;
 import com.dming.testplayer.R;
 
 import java.io.File;
@@ -22,32 +24,12 @@ import java.io.File;
 
 public class TestActivity extends AppCompatActivity {
 
-    static {
-        System.loadLibrary("native-lib");
-    }
-
     private Surface mSurface;
     private SurfaceView mSurfaceView;
     private SeekBar mSeekBar;
     TextView curTimeTv;
     TextView totalTimeTv;
     private boolean mSeeking = false;
-
-    private native void play(String path, Surface surface, OnProgressListener onProgressListener);
-
-    private native void seek(float percent);
-
-    private native long get_current_time();
-
-    private native long get_duration_time();
-
-    private native void pause();
-
-    private native void resume();
-
-    private native void update_surface(Surface surface);
-
-    private native void release();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -73,7 +55,7 @@ public class TestActivity extends AppCompatActivity {
                     public void run() {
                         String srcPath = new File(Environment.getExternalStorageDirectory(), "1/video2.mp4").getPath();
 //                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
-                        play(srcPath, mSurface, new OnProgressListener() {
+                        FPlayer.play(srcPath, mSurface, new OnProgressListener() {
                             @Override
                             public void onProgress(final long curTime, final long totalTime) {
                                 if (!mSeeking) {
@@ -97,20 +79,20 @@ public class TestActivity extends AppCompatActivity {
         findViewById(R.id.btn_test_2).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pause();
+                FPlayer.pause();
             }
         });
 
         findViewById(R.id.btn_test_3).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                resume();
+                FPlayer.resume();
             }
         });
         findViewById(R.id.btn_test_4).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                release();
+                FPlayer.release();
             }
         });
 
@@ -127,7 +109,7 @@ public class TestActivity extends AppCompatActivity {
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                seek(1.0f * seekBar.getProgress() / seekBar.getMax());
+                FPlayer.seek(1.0f * seekBar.getProgress() / seekBar.getMax());
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -149,7 +131,7 @@ public class TestActivity extends AppCompatActivity {
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
                 Log.i("DMFF", "surfaceChanged");
                 mSurface = holder.getSurface();
-                update_surface(mSurface);
+                FPlayer.update_surface(mSurface);
             }
 
             @Override
@@ -161,18 +143,19 @@ public class TestActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        pause();
+        FPlayer.pause();
         super.onPause();
     }
 
     @Override
     protected void onResume() {
-        resume();
+        FPlayer.resume();
         super.onResume();
     }
 
     @Override
     protected void onDestroy() {
+        FPlayer.release();
         super.onDestroy();
     }
 }
