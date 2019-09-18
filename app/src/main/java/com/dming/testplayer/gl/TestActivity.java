@@ -73,7 +73,7 @@ public class TestActivity extends AppCompatActivity {
                                             long totalSecTime = totalTime / 1000;
                                             curTimeTv.setText(DUtils.secToTime(curSecTime));
                                             totalTimeTv.setText(DUtils.secToTime(totalSecTime));
-                                            Log.i("DMFF", "curTime: " + curSecTime + " totalTime: " + totalSecTime);
+//                                            Log.i("DMFF", "curTime: " + curSecTime + " totalTime: " + totalSecTime);
                                             mSeekBar.setProgress((int) (100.0f * curSecTime / totalSecTime));
                                         }
                                     });

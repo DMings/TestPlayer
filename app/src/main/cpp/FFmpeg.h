@@ -93,8 +93,6 @@ extern std::list<FPacket *> video_pkt_list;
 
 extern void decode_packet(AVPacket *pkt);
 
-extern FPacket *audio_packet;
-
 extern bool audio_seeking;
 extern bool video_seeking;
 

@@ -71,8 +71,8 @@ int start_player(const char *src_filename, ANativeWindow *window,
     if (ff_duration <= 0) {
         ff_duration = 1000; //ms
     }
-//    int video_ret = video->open_stream(window);
-    int video_ret = 1;
+    int video_ret = video->open_stream(window);
+//    int video_ret = 1;
     int audio_ret = audio->open_stream();
 //    int audio_ret = 1;
     if (video_ret >= 0 || audio_ret >= 0) {

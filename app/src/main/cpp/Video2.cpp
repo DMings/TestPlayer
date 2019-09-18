@@ -56,7 +56,7 @@ void *Video::videoProcess(void *arg) {
     Video *video = (Video *) arg;
     FPacket *video_packet = NULL;
     video->openGL.createEgl(video->mWindow, NULL, video_dec_ctx->width, video_dec_ctx->height);
-    if (video->updateTimeFun) {
+    if (audio_stream_id == -1 && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
     while (true) {
@@ -126,27 +126,8 @@ void *Video::videoProcess(void *arg) {
                 LOGE("video legitimate decoding errors");
                 break;
             }
-            if (video_seeking) {
-                LOGE("check_video_is_seek copy_pkg:%lld", video_packet);
-                continue;
-            }
             //  用 st 上的时基才对 video_stream
             double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
-            double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
-            ret = sws_scale(video->sws_context,
-                            (const uint8_t *const *) frame->data, frame->linesize,
-                            0, video_dec_ctx->height,
-                            video->dst_data, video->dst_line_size);
-//            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
-//                 get_audio_clock(),
-//                 get_master_clock(),
-//                 pkt_duration);
-            if (audio_stream_id == -1) { // 更新当前时间
-                ff_time = (int64_t) (pts);
-                if (video->updateTimeFun) {
-                    video->updateTimeFun->update_time_fun();
-                }
-            }
             if (checkout_time) {
                 checkout_time = false;
                 pthread_mutex_lock(&seek_mutex);
@@ -157,7 +138,27 @@ void *Video::videoProcess(void *arg) {
                 }
                 pthread_mutex_unlock(&seek_mutex);
             }
+//            LOGI("video pts: %f get_master_clock: %f", pts, get_master_clock());
+            if (video_seeking) {
+                LOGE("check_video_is_seek copy_pkg:%lld", video_packet);
+                continue;
+            }
+            double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
+            ret = sws_scale(video->sws_context,
+                            (const uint8_t *const *) frame->data, frame->linesize,
+                            0, video_dec_ctx->height,
+                            video->dst_data, video->dst_line_size);
+//            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
+//                 get_audio_clock(),
+//                 get_master_clock(),
+//                 pkt_duration);
             set_video_clock(pts);
+            if (audio_stream_id == -1) { // 更新当前时间
+                ff_time = (int64_t) (pts);
+                if (video->updateTimeFun) {
+                    video->updateTimeFun->update_time_fun();
+                }
+            }
             int delay = video->synchronize_video(pkt_duration); // ms
 //            LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
 //                 (get_master_clock() - video->test_video_time));
@@ -188,7 +189,7 @@ void *Video::videoProcess(void *arg) {
         free_packet(video_packet);
     }
     end:
-    if (video->updateTimeFun) {
+    if (audio_stream_id == -1 && video->updateTimeFun) {
         video->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);

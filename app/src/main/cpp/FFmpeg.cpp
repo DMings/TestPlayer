@@ -29,8 +29,6 @@ FPacket *copy_pkg = NULL;
 AVStream *video_stream = NULL;
 AVStream *audio_stream = NULL;
 
-FPacket *audio_packet = NULL;
-
 bool audio_seeking = false;
 bool video_seeking = false;
 bool want_seek = false;
@@ -268,7 +266,6 @@ void ff_release() {
         free_packet(copy_pkg);
         copy_pkg = NULL;
     }
-    audio_packet = NULL;
     fmt_ctx = NULL;
     pthread_mutex_destroy(&seek_mutex);
 }
