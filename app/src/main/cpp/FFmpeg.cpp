@@ -31,7 +31,7 @@ AVStream *audio_stream = NULL;
 
 FPacket *audio_packet = NULL;
 
-bool want_audio_seek = false;
+bool audio_seeking = false;
 bool video_seeking = false;
 bool want_seek = false;
 
@@ -99,7 +99,7 @@ double get_master_clock() {
 }
 
 void set_master_clock(double time) {
-    if(time < 0){
+    if (time < 0) {
         master_clk.last_updated = 0;
     }
     master_clk.last_updated = time;
@@ -155,16 +155,9 @@ void decode_packet(AVPacket *pkt) {
             want_video_seek_inner = false;
             copy_pkg->checkout_time = true;
             if (audio_stream_id == -1) {
-                want_audio_seek = false;
+                audio_seeking = false;
             }
         }
-//        else if (want_video_seek && pkt->stream_index == audio_stream_id) { // 等待音频校准
-//            if (!want_audio_seek) { //当音频校准的时候,结束无校准状态
-//                want_video_seek = false;
-//            } else {
-//                copy_pkg->checkout_time = true; // 使用无校准时基
-//            }
-//        }
         pthread_mutex_unlock(&c_mutex);
     }
 //    LOGE("seek_frame222 audio: %d video: %d copy_pkg:%d",(pkt->stream_index == audio_stream_id),(pkt->stream_index == video_stream_id),copy_pkg);
@@ -229,22 +222,11 @@ void clearAllList() {
     }
 }
 
-bool check_audio_is_seek() {
-    bool b = false;
-    pthread_mutex_lock(&c_mutex);
-    if (audio_packet != NULL) {
-//        b = audio_packet->is_seek;
-    }
-    pthread_mutex_unlock(&c_mutex);
-    return b;
-}
-
 void seek_frame_if_need() {
     pthread_mutex_lock(&c_mutex);
     if (want_seek) {
         LOGE("seek_frame_if_need---------------------------------------------->");
         want_seek = false;
-        want_audio_seek = true;
         want_audio_seek_inner = true;
         want_video_seek_inner = true;
         pthread_mutex_lock(&seek_mutex);
@@ -260,14 +242,12 @@ void seek_frame_if_need() {
 void seek_frame(float percent) {
     pthread_mutex_lock(&seek_mutex);
     video_seeking = true;
+    audio_seeking = true;
     pthread_mutex_unlock(&seek_mutex);
     pthread_mutex_lock(&c_mutex);
-    LOGI("seek_frame-------------------------------------------------->%d",video_seeking);
+    LOGI("seek_frame------------------------------------>v %d a %d", video_seeking, audio_seeking);
     want_seek = true;
     clearAllList();
-    if (audio_packet != NULL) {
-//        audio_packet->is_seek = true;
-    }
     seek_time = percent * fmt_ctx->duration;
     pthread_mutex_unlock(&c_mutex);
 }

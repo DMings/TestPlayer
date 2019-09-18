@@ -91,13 +91,11 @@ extern pthread_cond_t audio_cond;
 extern std::list<FPacket *> audio_pkt_list;
 extern std::list<FPacket *> video_pkt_list;
 
-extern bool check_audio_is_seek();
-
 extern void decode_packet(AVPacket *pkt);
 
 extern FPacket *audio_packet;
 
-extern bool want_audio_seek;
+extern bool audio_seeking;
 extern bool video_seeking;
 
 extern void seek_frame_if_need();

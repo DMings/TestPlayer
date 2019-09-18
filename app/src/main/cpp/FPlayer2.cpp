@@ -5,6 +5,7 @@
 #include "FPlayer2.h"
 
 Video *video = NULL;
+Audio *audio = NULL;
 JavaVM *native_jvm = NULL;
 JNIEnv *native_env = NULL;
 jobject progress_obj = NULL;
@@ -17,7 +18,7 @@ void jvm_attach_fun() {
 
 void update_time_fun() {
     pthread_mutex_lock(&seek_mutex);
-    if (!video_seeking) {
+    if (!video_seeking && !audio_seeking) {
         native_env->CallVoidMethod(progress_obj, on_progress, ff_time, ff_duration);
     }
     pthread_mutex_unlock(&seek_mutex);
@@ -48,8 +49,8 @@ int start_player(const char *src_filename, ANativeWindow *window,
     updateTimeFun.update_time_fun = update_time_fun;
     updateTimeFun.jvm_detach_fun = jvm_detach_fun;
     video = new Video(&updateTimeFun);
+    audio = new Audio(&updateTimeFun);
     AVPacket *pkt = av_packet_alloc();
-//    Audio audio;
     LOGI("avformat_open_input %s", src_filename);
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
@@ -70,10 +71,10 @@ int start_player(const char *src_filename, ANativeWindow *window,
     if (ff_duration <= 0) {
         ff_duration = 1000; //ms
     }
-    int video_ret = video->open_stream(window);
-//    int video_ret = 1;
-//    int audio_ret = audio.open_stream();
-    int audio_ret = 1;
+//    int video_ret = video->open_stream(window);
+    int video_ret = 1;
+    int audio_ret = audio->open_stream();
+//    int audio_ret = 1;
     if (video_ret >= 0 || audio_ret >= 0) {
         pkt->data = NULL;
         pkt->size = 0;
@@ -93,9 +94,11 @@ int start_player(const char *src_filename, ANativeWindow *window,
     } else {
         LOGE("Could not find audio or video stream in the input, aborting");
     }
-//    audio.release();
+    audio->release();
     video->release();
+    delete audio;
     delete video;
+    audio = NULL;
     video = NULL;
     avformat_flush(fmt_ctx);
     LOGI("audio.release()  video.release()");
@@ -118,11 +121,17 @@ void pause() {
     if (video && video_stream_id != -1) {
         video->pause();
     }
+    if (audio && audio_stream_id != -1) {
+        audio->pause();
+    }
 }
 
 void resume() {
     if (video && video_stream_id != -1) {
         video->resume();
+    }
+    if (audio && audio_stream_id != -1) {
+        audio->resume();
     }
 }
 

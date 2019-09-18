@@ -22,7 +22,7 @@ int Video::synchronize_video(double pkt_duration) { // us
     }
     duration = duration < 200 ? duration : 200;
     pthread_mutex_lock(&seek_mutex);
-    is_seeking = want_audio_seek;
+    is_seeking = audio_seeking;
     pthread_mutex_unlock(&seek_mutex);
     if (!is_seeking) {
         if (audio_stream_id != -1) {
@@ -93,9 +93,6 @@ void *Video::videoProcess(void *arg) {
 
         if (video_packet->checkout_time) {
             checkout_time = true;
-            pthread_mutex_lock(&seek_mutex);
-            video_seeking = false;
-            pthread_mutex_unlock(&seek_mutex);
             avcodec_flush_buffers(video_dec_ctx);
         }
 
@@ -151,8 +148,9 @@ void *Video::videoProcess(void *arg) {
                 }
             }
             if (checkout_time) {
-                pthread_mutex_lock(&seek_mutex);
                 checkout_time = false;
+                pthread_mutex_lock(&seek_mutex);
+                video_seeking = false;
                 if (audio_stream_id == -1) { // 校准时间
                     double time = av_gettime_relative() / 1000.0;
                     set_master_clock(time - pts);

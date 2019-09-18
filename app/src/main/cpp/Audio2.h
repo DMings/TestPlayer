@@ -8,14 +8,21 @@
 
 #include "FFmpeg.h"
 #include "OpenSL.h"
+#include "AV.h"
 
-class Audio {
+class Audio : AV {
 public:
+    Audio(UpdateTimeFun *updateTimeFun);
+
     int synchronize_audio(int nb_samples);
 
     static void slBufferCallback();
 
     int open_stream();
+
+    void pause();
+
+    void resume();
 
     void release();
 
@@ -24,13 +31,16 @@ public:
     static pthread_cond_t a_cond;
 
 private:
-    static Clock audio_clk;
     static void *audioProcess(void *arg);
     OpenSL openSL;
     SwrContext *swr_context;
     uint8_t *dst_data;
     pthread_t p_audio_tid;
-    bool thread_flag = true;
+    bool thread_finish = false;
+    UpdateTimeFun *updateTimeFun = NULL;
+    pthread_cond_t pause_cond;
+    pthread_mutex_t pause_mutex;
+    bool is_pause = false;
 };
 
 
