@@ -1,5 +1,8 @@
 package com.dming.testplayer.gl;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.Nullable;
@@ -50,6 +53,14 @@ public class TestActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.act_test);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            } else {
+                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 666);
+            }
+        }
+
         mSeekBar = findViewById(R.id.play_sb);
         mSurfaceView = findViewById(R.id.sv_test);
         curTimeTv = findViewById(R.id.curTimeTv);
@@ -69,12 +80,10 @@ public class TestActivity extends AppCompatActivity {
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
-                                            long curSecTime = curTime / 1000;
-                                            long totalSecTime = totalTime / 1000;
-                                            curTimeTv.setText(DUtils.secToTime(curSecTime));
-                                            totalTimeTv.setText(DUtils.secToTime(totalSecTime));
+                                            curTimeTv.setText(DUtils.secToTime(curTime));
+                                            totalTimeTv.setText(DUtils.secToTime(totalTime));
 //                                            Log.i("DMFF", "curTime: " + curSecTime + " totalTime: " + totalSecTime);
-                                            mSeekBar.setProgress((int) (100.0f * curSecTime / totalSecTime));
+                                            mSeekBar.setProgress((int) (100.0f * curTime / totalTime));
                                         }
                                     });
                                 }

@@ -41,6 +41,8 @@ private:
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
     bool is_pause = false;
+    //test
+    double test_audio_time = 0;
 };
 
 

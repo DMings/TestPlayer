@@ -103,9 +103,11 @@ extern AVCodecContext *audio_dec_ctx;
 
 extern bool crash_error;
 
-extern int64_t ff_time;
+extern int64_t ff_sec_time;
 
-extern int64_t ff_duration;
+extern int64_t ff_last_sec_time;
+
+extern int64_t ff_sec_duration;
 
 extern void clearAllList();
 

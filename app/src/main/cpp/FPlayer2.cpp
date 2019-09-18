@@ -19,7 +19,7 @@ void jvm_attach_fun() {
 void update_time_fun() {
     pthread_mutex_lock(&seek_mutex);
     if (!video_seeking && !audio_seeking) {
-        native_env->CallVoidMethod(progress_obj, on_progress, ff_time, ff_duration);
+        native_env->CallVoidMethod(progress_obj, on_progress, ff_sec_time, ff_sec_duration);
     }
     pthread_mutex_unlock(&seek_mutex);
 }
@@ -67,9 +67,9 @@ int start_player(const char *src_filename, ANativeWindow *window,
     //
     ff_init();
     // ->>
-    ff_duration = fmt_ctx->duration / 1000; //ms
-    if (ff_duration <= 0) {
-        ff_duration = 1000; //ms
+    ff_sec_duration = fmt_ctx->duration / AV_TIME_BASE; //ms
+    if (ff_sec_duration <= 0) {
+        ff_sec_duration = 1; //ms
     }
     int video_ret = video->open_stream(window);
 //    int video_ret = 1;
@@ -151,9 +151,9 @@ void release() {
 }
 
 int64_t get_current_time() {
-    return ff_time;
+    return ff_sec_duration;
 }
 
 int64_t get_duration_time() {
-    return ff_duration;
+    return ff_sec_duration;
 }

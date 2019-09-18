@@ -105,12 +105,13 @@ void *Audio::audioProcess(void *arg) {
             checkout_time = true;
             pthread_mutex_lock(&seek_mutex);
             avcodec_flush_buffers(audio_dec_ctx);
+            swr_convert(audio->swr_context, frame->data, frame->sample_rate, NULL, 0);
             pthread_mutex_unlock(&seek_mutex);
         }
         // 解码
-        pthread_mutex_lock(&seek_mutex);
+//        pthread_mutex_lock(&seek_mutex);
         ret = avcodec_send_packet(audio_dec_ctx, audio_packet->avPacket);
-        pthread_mutex_unlock(&seek_mutex);
+//        pthread_mutex_unlock(&seek_mutex);
         if (ret < 0) {
             LOGE("Error audio sending a packet for decoding audio_pkt_list size: %d", audio_pkt_list.size());
             av_packet_free(&audio_packet->avPacket);
@@ -123,9 +124,11 @@ void *Audio::audioProcess(void *arg) {
             break;
         }
         while (ret >= 0) {
-            pthread_mutex_lock(&seek_mutex);
+
+            audio->test_audio_time = (av_gettime_relative() / 1000.0);
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
-            pthread_mutex_unlock(&seek_mutex);
+            LOGI("avcodec_receive_frame cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
+
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                 break;
@@ -153,10 +156,18 @@ void *Audio::audioProcess(void *arg) {
                 continue;
             }
 
-            ff_time = (int64_t) (pts);
-            if (audio->updateTimeFun) {
+
+            LOGI("audio pts: %f cast time: %f", pts, ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
+            audio->test_audio_time = (av_gettime_relative() / 1000.0);
+
+            ff_sec_time = (int64_t) (pts / 1000);
+            if (ff_last_sec_time != ff_sec_time && audio->updateTimeFun) {
                 audio->updateTimeFun->update_time_fun();
             }
+            LOGI("updateTimeFun cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
+
+            ff_last_sec_time = ff_sec_time;
+
             pthread_mutex_lock(&a_mutex);
             if (!must_feed) {
                 pthread_cond_wait(&a_cond, &a_mutex); // 等待回调

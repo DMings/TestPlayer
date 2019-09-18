@@ -10,11 +10,9 @@ int video_stream_id = -1;
 int audio_stream_id = -1;
 
 pthread_cond_t c_cond;
-pthread_cond_t audio_cond;
 pthread_mutex_t c_mutex;
-
 pthread_mutex_t seek_mutex;
-
+pthread_cond_t audio_cond;
 pthread_cond_t video_cond;
 
 std::list<FPacket *> audio_pkt_list;
@@ -43,8 +41,9 @@ AVCodecContext *audio_dec_ctx = NULL;
 
 bool crash_error = false;
 
-int64_t ff_time = 0; // 当前时间
-int64_t ff_duration = 0; // 总时间
+int64_t ff_sec_time = 0; // 当前时间
+int64_t ff_last_sec_time = 0; // 上次当前时间，用于减少call java次数
+int64_t ff_sec_duration = 0; // 总时间
 
 int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                        AVFormatContext *fmt_ctx, enum AVMediaType type) {

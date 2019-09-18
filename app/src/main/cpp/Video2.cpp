@@ -98,9 +98,9 @@ void *Video::videoProcess(void *arg) {
 
 //        LOGE("video copy_pkg:%d", video_packet);
         // 解码
-        pthread_mutex_lock(&seek_mutex);
+//        pthread_mutex_lock(&seek_mutex);
         ret = avcodec_send_packet(video_dec_ctx, video_packet->avPacket);
-        pthread_mutex_unlock(&seek_mutex);
+//        pthread_mutex_unlock(&seek_mutex);
         if (ret < 0) {
             LOGE("Error video sending a packet for decoding video_pkt_list size: %d", video_pkt_list.size());
             av_packet_free(&video_packet->avPacket);
@@ -113,9 +113,9 @@ void *Video::videoProcess(void *arg) {
             break;
         }
         while (ret >= 0) {
-            pthread_mutex_lock(&seek_mutex);
+//            pthread_mutex_lock(&seek_mutex);
             ret = avcodec_receive_frame(video_dec_ctx, frame);
-            pthread_mutex_unlock(&seek_mutex);
+//            pthread_mutex_unlock(&seek_mutex);
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                 break;
@@ -154,10 +154,11 @@ void *Video::videoProcess(void *arg) {
 //                 pkt_duration);
             set_video_clock(pts);
             if (audio_stream_id == -1) { // 更新当前时间
-                ff_time = (int64_t) (pts);
-                if (video->updateTimeFun) {
+                ff_sec_time = (int64_t) (pts / 1000);
+                if (ff_last_sec_time != ff_sec_time && video->updateTimeFun) {
                     video->updateTimeFun->update_time_fun();
                 }
+                ff_last_sec_time = ff_sec_time;
             }
             int delay = video->synchronize_video(pkt_duration); // ms
 //            LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
