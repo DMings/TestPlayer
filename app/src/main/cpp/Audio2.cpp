@@ -120,6 +120,9 @@ void *Audio::audioProcess(void *arg) {
                 LOGE("audio pts: checkout_time------------");
                 want_audio_seek = false;
             }
+//            if (pkt->stream_index == audio_stream_id) {
+//                ff_time = (int64_t) (av_q2d(audio_stream->time_base) * pkt->pts);
+//            }
             LOGI("audio pts: %f get_master_clock: %f", pts,
                  get_master_clock());
             wanted_nb_samples = frame->nb_samples;

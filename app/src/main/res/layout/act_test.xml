@@ -30,12 +30,42 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="release"/>
-        <SeekBar
-                android:id="@+id/test_sb"
+
+        <LinearLayout
                 android:layout_marginTop="20dp"
-                android:max="100"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"/>
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+        >
+            <TextView
+                    android:id="@+id/curTimeTv"
+                    android:layout_marginLeft="6dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#000"
+                    android:text="00:00"/>
+
+            <android.support.v7.widget.AppCompatSeekBar
+                    android:id="@+id/play_sb"
+                    android:layout_gravity="center_vertical"
+                    android:visibility="visible"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:progress="0"
+                    android:max="100"/>
+
+            <TextView
+                    android:id="@+id/totalTimeTv"
+                    android:layout_gravity="center_vertical"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#000"
+                    android:text="00:00"/>
+        </LinearLayout>
 
     </LinearLayout>
     <LinearLayout

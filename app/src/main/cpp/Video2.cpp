@@ -4,10 +4,15 @@
 
 #include "Video2.h"
 
+Video::Video(UpdateTimeFun *fun) {
+    updateTimeFun = fun;
+}
+
 int Video::synchronize_video(double pkt_duration) { // us
     double wanted_delay = -1;
     double diff_ms;
     double duration;
+    bool is_seeking;
     AVRational rational = video_stream->r_frame_rate;
     int video_base = (int) 1000.0 * rational.den / rational.num;
     if (video_base) {
@@ -16,7 +21,10 @@ int Video::synchronize_video(double pkt_duration) { // us
         duration = pkt_duration;
     }
     duration = duration < 200 ? duration : 200;
-    if (!want_audio_seek && !check_video_is_seek()) {
+    pthread_mutex_lock(&seek_mutex);
+    is_seeking = want_audio_seek;
+    pthread_mutex_unlock(&seek_mutex);
+    if (!is_seeking) {
         if (audio_stream_id != -1) {
             diff_ms = get_video_pts_clock() - get_audio_clock();
         } else {
@@ -44,8 +52,13 @@ int Video::synchronize_video(double pkt_duration) { // us
 void *Video::videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
+    bool checkout_time = false;
     Video *video = (Video *) arg;
+    FPacket *video_packet = NULL;
     video->openGL.createEgl(video->mWindow, NULL, video_dec_ctx->width, video_dec_ctx->height);
+    if (video->updateTimeFun) {
+        video->updateTimeFun->jvm_attach_fun();
+    }
     while (true) {
         do {
 //            LOGE("video_pkt_list size: %d", video_pkt_list.size())
@@ -77,17 +90,25 @@ void *Video::videoProcess(void *arg) {
             }
             pthread_mutex_unlock(&c_mutex);
         } while (video_packet == NULL);
+
+        if (video_packet->checkout_time) {
+            checkout_time = true;
+            pthread_mutex_lock(&seek_mutex);
+            video_seeking = false;
+            pthread_mutex_unlock(&seek_mutex);
+            avcodec_flush_buffers(video_dec_ctx);
+        }
+
 //        LOGE("video copy_pkg:%d", video_packet);
         // 解码
         pthread_mutex_lock(&seek_mutex);
         ret = avcodec_send_packet(video_dec_ctx, video_packet->avPacket);
         pthread_mutex_unlock(&seek_mutex);
         if (ret < 0) {
-            LOGE("Error video sending a packet for decoding");
-            LOGE("video_pkt_list size: %d", video_pkt_list.size())
-            pthread_mutex_lock(&c_mutex);
+            LOGE("Error video sending a packet for decoding video_pkt_list size: %d", video_pkt_list.size());
             av_packet_free(&video_packet->avPacket);
             free_packet(video_packet);
+            pthread_mutex_lock(&c_mutex);
             crash_error = true;
             pthread_cond_signal(&c_cond);
             pthread_mutex_unlock(&c_mutex);
@@ -108,7 +129,7 @@ void *Video::videoProcess(void *arg) {
                 LOGE("video legitimate decoding errors");
                 break;
             }
-            if (check_video_is_seek()) {
+            if (video_seeking) {
                 LOGE("check_video_is_seek copy_pkg:%lld", video_packet);
                 continue;
             }
@@ -123,9 +144,20 @@ void *Video::videoProcess(void *arg) {
 //                 get_audio_clock(),
 //                 get_master_clock(),
 //                 pkt_duration);
-            if (video_packet->checkout_time) {
-                double time = av_gettime_relative() / 1000.0;
-                set_master_clock(time - pts);
+            if (audio_stream_id == -1) { // 更新当前时间
+                ff_time = (int64_t) (pts);
+                if (video->updateTimeFun) {
+                    video->updateTimeFun->update_time_fun();
+                }
+            }
+            if (checkout_time) {
+                pthread_mutex_lock(&seek_mutex);
+                checkout_time = false;
+                if (audio_stream_id == -1) { // 校准时间
+                    double time = av_gettime_relative() / 1000.0;
+                    set_master_clock(time - pts);
+                }
+                pthread_mutex_unlock(&seek_mutex);
             }
             set_video_clock(pts);
             int delay = video->synchronize_video(pkt_duration); // ms
@@ -137,7 +169,6 @@ void *Video::videoProcess(void *arg) {
 //                     (get_master_clock() - video->test_video_time));
             }
             video->test_video_time = get_master_clock();
-//            LOGI("height: %d video_dec_ctx->height %d",ret,video_dec_ctx->height);
 
             pthread_mutex_lock(&c_mutex);
             if (video->will_update_surface) {
@@ -155,12 +186,13 @@ void *Video::videoProcess(void *arg) {
             pthread_mutex_unlock(&video->pause_mutex);
 
         }
-        pthread_mutex_lock(&c_mutex);
         av_packet_free(&video_packet->avPacket);
         free_packet(video_packet);
-        pthread_mutex_unlock(&c_mutex);
     }
     end:
+    if (video->updateTimeFun) {
+        video->updateTimeFun->jvm_detach_fun();
+    }
     av_frame_free(&frame);
     video->openGL.release();
     LOGE("video videoProcess");
@@ -235,6 +267,7 @@ void Video::release() {
         av_freep(&dst_data[0]);
         sws_freeContext(sws_context);
     }
+    updateTimeFun = NULL;
     pthread_cond_destroy(&pause_cond);
     pthread_cond_destroy(&video_cond);
     pthread_mutex_destroy(&pause_mutex);

@@ -11,6 +11,9 @@
 
 class Video : AV {
 public:
+
+    Video(UpdateTimeFun* updateTimeFun);
+
     int open_stream(ANativeWindow *window);
 
     void pause();
@@ -22,7 +25,6 @@ public:
     void update_surface(ANativeWindow *window);
 
 private:
-    static Clock video_clk;
     SwsContext *sws_context;
     ANativeWindow *mWindow;
     OpenGL openGL;
@@ -34,6 +36,7 @@ private:
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
     bool will_update_surface = false;
+    UpdateTimeFun* updateTimeFun = NULL;
     //test
     double test_video_time = 0;
 

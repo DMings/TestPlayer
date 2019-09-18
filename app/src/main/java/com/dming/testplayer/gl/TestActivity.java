@@ -10,6 +10,8 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.widget.SeekBar;
+import android.widget.TextView;
+import com.dming.testplayer.DUtils;
 import com.dming.testplayer.R;
 
 import java.io.File;
@@ -24,10 +26,17 @@ public class TestActivity extends AppCompatActivity {
     private Surface mSurface;
     private SurfaceView mSurfaceView;
     private SeekBar mSeekBar;
+    TextView curTimeTv;
+    TextView totalTimeTv;
+    private boolean mSeeking = false;
 
-    private native void play(String path, Surface surface,OnProgressListener onProgressListener);
+    private native void play(String path, Surface surface, OnProgressListener onProgressListener);
 
     private native void seek(float percent);
+
+    private native long get_current_time();
+
+    private native long get_duration_time();
 
     private native void pause();
 
@@ -41,8 +50,10 @@ public class TestActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.act_test);
-        mSeekBar = findViewById(R.id.test_sb);
+        mSeekBar = findViewById(R.id.play_sb);
         mSurfaceView = findViewById(R.id.sv_test);
+        curTimeTv = findViewById(R.id.curTimeTv);
+        totalTimeTv = findViewById(R.id.totalTimeTv);
         findViewById(R.id.btn_test_1).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -54,13 +65,19 @@ public class TestActivity extends AppCompatActivity {
                         play(srcPath, mSurface, new OnProgressListener() {
                             @Override
                             public void onProgress(final long curTime, final long totalTime) {
-                                runOnUiThread(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        Log.i("DMFF","curTime: "+curTime+ " totalTime: "+totalTime);
-                                        mSeekBar.setProgress((int) (100.0f * curTime / totalTime));
-                                    }
-                                });
+                                if (!mSeeking) {
+                                    runOnUiThread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            long curSecTime = curTime / 1000;
+                                            long totalSecTime = totalTime / 1000;
+                                            curTimeTv.setText(DUtils.secToTime(curSecTime));
+                                            totalTimeTv.setText(DUtils.secToTime(totalSecTime));
+                                            Log.i("DMFF", "curTime: " + curSecTime + " totalTime: " + totalSecTime);
+                                            mSeekBar.setProgress((int) (100.0f * curSecTime / totalSecTime));
+                                        }
+                                    });
+                                }
                             }
                         });
                     }
@@ -96,12 +113,19 @@ public class TestActivity extends AppCompatActivity {
 
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
-
+                mSeeking = true;
             }
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
                 seek(1.0f * seekBar.getProgress() / seekBar.getMax());
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mSeeking = false;
+                    }
+                });
+
             }
         });
 

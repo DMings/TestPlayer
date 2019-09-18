@@ -25,7 +25,7 @@ Java_com_dming_testplayer_gl_TestActivity_resume(JNIEnv *env, jobject instance) 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_dming_testplayer_gl_TestActivity_update_1surface(JNIEnv *env, jobject instance,
-                                                   jobject surface) {
+                                                          jobject surface) {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     update_surface(window);
 }
@@ -37,7 +37,7 @@ Java_com_dming_testplayer_gl_TestActivity_release(JNIEnv *env, jobject instance)
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
-//    jvm = vm;
+    native_jvm = vm;
     LOGE("JNI_OnLoad");
     JNIEnv *env;
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
@@ -50,7 +50,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 }
 
 JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
-//    jvm = NULL;
+    native_jvm = NULL;
     LOGE("JNI_OnUnload");
 }
 
@@ -62,7 +62,19 @@ Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, js
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     const char *path = env->GetStringUTFChars(path_, NULL);
     jclass plClass = env->GetObjectClass(onProgressListener);
-    jmethodID onProgress = env->GetMethodID(plClass,"onProgress","(JJ)V");
-    start_player(path, window,env,onProgressListener,onProgress);
+    jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(JJ)V");
+    start_player(path, window, env, onProgressListener, onProgress);
     env->ReleaseStringUTFChars(path_, path);
+}
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_dming_testplayer_gl_TestActivity_get_1current_1time(JNIEnv *env, jobject instance) {
+    return get_current_time();
+}
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_dming_testplayer_gl_TestActivity_get_1duration_1time(JNIEnv *env, jobject instance) {
+    return get_duration_time();
 }

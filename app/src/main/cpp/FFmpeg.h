@@ -29,15 +29,27 @@ struct Clock {
     double last_updated;
 };
 
-struct FPacket{
-    AVPacket* avPacket;
-    bool is_seek;
+struct FPacket {
+    AVPacket *avPacket;
+//    bool is_seek;
     bool checkout_time;
 };
 
-extern FPacket* alloc_packet();
+typedef void (*update_time)();
 
-extern void free_packet(FPacket* packet);
+typedef void (*jvm_attach)();
+
+typedef void (*jvm_detach)();
+
+struct UpdateTimeFun {
+    jvm_attach jvm_attach_fun;
+    jvm_detach jvm_detach_fun;
+    update_time update_time_fun;
+};
+
+extern FPacket *alloc_packet();
+
+extern void free_packet(FPacket *packet);
 
 extern int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                               AVFormatContext *fmt_ctx, AVMediaType type);
@@ -79,25 +91,25 @@ extern pthread_cond_t audio_cond;
 extern std::list<FPacket *> audio_pkt_list;
 extern std::list<FPacket *> video_pkt_list;
 
-extern bool check_video_is_seek();
-
 extern bool check_audio_is_seek();
 
 extern void decode_packet(AVPacket *pkt);
 
 extern FPacket *audio_packet;
 
-extern FPacket *video_packet;
-
 extern bool want_audio_seek;
-extern bool want_video_seek;
+extern bool video_seeking;
 
-extern void seek_frame_if_need(AVPacket *pkt);
+extern void seek_frame_if_need();
 
 extern AVCodecContext *video_dec_ctx;
 extern AVCodecContext *audio_dec_ctx;
 
 extern bool crash_error;
+
+extern int64_t ff_time;
+
+extern int64_t ff_duration;
 
 extern void clearAllList();
 
