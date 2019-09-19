@@ -267,4 +267,6 @@ void ff_release() {
     }
     fmt_ctx = NULL;
     pthread_mutex_destroy(&seek_mutex);
+    pthread_cond_destroy(&c_cond);
+    pthread_mutex_destroy(&c_mutex);
 }

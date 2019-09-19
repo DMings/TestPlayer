@@ -29,7 +29,6 @@ public:
     static bool must_feed;
     static pthread_mutex_t a_mutex;
     static pthread_cond_t a_cond;
-
 private:
     static void *audioProcess(void *arg);
 
@@ -37,9 +36,9 @@ private:
 
     bool chooseDstData = false;
     OpenSL openSL;
-    SwrContext *swr_context;
-    uint8_t *dst_data_1;
-    uint8_t *dst_data_2;
+    SwrContext *swr_context = NULL;
+    uint8_t *dst_data_1 = NULL;
+    uint8_t *dst_data_2 = NULL;
     pthread_t p_audio_tid;
     bool thread_finish = false;
     UpdateTimeFun *updateTimeFun = NULL;

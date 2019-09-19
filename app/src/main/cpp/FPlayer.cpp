@@ -4,12 +4,19 @@
 
 #include "FPlayer.h"
 
+enum PlayStatus {
+    IDLE, PREPARE, PLAYING,
+};
+PlayStatus play_status = IDLE;
+pthread_mutex_t play_mutex;
+
 Video *video = NULL;
 Audio *audio = NULL;
 JavaVM *native_jvm = NULL;
 JNIEnv *native_env = NULL;
 jobject progress_obj = NULL;
 jmethodID on_progress = NULL;
+
 
 void jvm_attach_fun() {
     native_env = NULL;
@@ -46,7 +53,12 @@ int start_player(const char *src_filename, ANativeWindow *window,
                  JNIEnv *env, jobject progressObj, jmethodID onProgress) {
     int ret = 0;
     bool cr;
-    if (video != NULL) {
+    bool p;
+    pthread_mutex_lock(&play_mutex);
+    p = play_status != IDLE;
+    play_status = PREPARE;
+    pthread_mutex_unlock(&play_mutex);
+    if (p) {
         return -3;
     }
     update_java_time_init(env, progressObj, onProgress);
@@ -61,11 +73,17 @@ int start_player(const char *src_filename, ANativeWindow *window,
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
         LOGE("Could not open source file %s", src_filename);
+        pthread_mutex_lock(&play_mutex);
+        play_status = IDLE;
+        pthread_mutex_unlock(&play_mutex);
         return -1;
     }
     /* retrieve stream information */
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         LOGE("Could not find stream information");
+        pthread_mutex_lock(&play_mutex);
+        play_status = IDLE;
+        pthread_mutex_unlock(&play_mutex);
         return -2;
     }
     pthread_mutex_init(&c_mutex, NULL);
@@ -82,6 +100,9 @@ int start_player(const char *src_filename, ANativeWindow *window,
     int audio_ret = audio->open_stream();
 //    int audio_ret = 1;
     if (video_ret >= 0 || audio_ret >= 0) {
+        pthread_mutex_lock(&play_mutex);
+        play_status = PLAYING;
+        pthread_mutex_unlock(&play_mutex);
         pkt->data = NULL;
         pkt->size = 0;
         do {
@@ -107,16 +128,15 @@ int start_player(const char *src_filename, ANativeWindow *window,
     audio = NULL;
     video = NULL;
     LOGI("audio.release()  video.release()");
-
     refresh_finish(env, progressObj, onProgress);
-
     avformat_flush(fmt_ctx);
     av_packet_free(&pkt);
     avformat_close_input(&fmt_ctx);
-    pthread_cond_destroy(&c_cond);
-    pthread_mutex_destroy(&c_mutex);
     ff_release();
     LOGI("avformat_close_input")
+    pthread_mutex_lock(&play_mutex);
+    play_status = IDLE;
+    pthread_mutex_unlock(&play_mutex);
     return 0;
 }
 
@@ -127,36 +147,59 @@ void seek(float percent) {
 }
 
 void pause() {
-    if (video && video_stream_id != -1) {
-        video->pause();
+    pthread_mutex_lock(&play_mutex);
+    if (play_status == PLAYING) {
+        if (video && video_stream_id != -1) {
+            video->pause();
+        }
+        if (audio && audio_stream_id != -1) {
+            audio->pause();
+        }
     }
-    if (audio && audio_stream_id != -1) {
-        audio->pause();
-    }
+    pthread_mutex_unlock(&play_mutex);
 }
 
 void resume() {
-    if (video && video_stream_id != -1) {
-        video->resume();
+    pthread_mutex_lock(&play_mutex);
+    if (play_status == PLAYING) {
+        if (video && video_stream_id != -1) {
+            video->resume();
+        }
+        if (audio && audio_stream_id != -1) {
+            audio->resume();
+        }
     }
-    if (audio && audio_stream_id != -1) {
-        audio->resume();
-    }
+    pthread_mutex_unlock(&play_mutex);
 }
 
 void update_surface(ANativeWindow *window) {
-    if (video && video_stream_id != -1) {
-        video->update_surface(window);
+    pthread_mutex_lock(&play_mutex);
+    if (play_status == PLAYING) {
+        if (video && video_stream_id != -1) {
+            video->update_surface(window);
+        }
     }
+    pthread_mutex_unlock(&play_mutex);
 }
 
+
 void release() {
-    if (!crash_error && (video_stream_id != -1 || audio_stream_id != -1)) {
-        resume();
-        pthread_mutex_lock(&c_mutex);
-        crash_error = true;
-        pthread_mutex_unlock(&c_mutex);
+    pthread_mutex_lock(&play_mutex);
+    LOGE("play_status: %d",play_status);
+    if (play_status != IDLE) {
+        if (!crash_error && (video_stream_id != -1 || audio_stream_id != -1)) {
+            if (video && video_stream_id != -1) {
+                video->resume();
+            }
+            if (audio && audio_stream_id != -1) {
+                audio->resume();
+            }
+            pthread_mutex_lock(&c_mutex);
+            crash_error = true;
+            pthread_mutex_unlock(&c_mutex);
+        }
     }
+    pthread_mutex_unlock(&play_mutex);
 }
 
 int64_t get_current_time() {

@@ -5,6 +5,7 @@
 #include "Video.h"
 
 Video::Video(UpdateTimeFun *fun) {
+    dst_data[0] = NULL;
     updateTimeFun = fun;
 }
 
@@ -44,17 +45,17 @@ uint Video::synchronize_video(double pkt_duration) { // us
     if (diff_ms < 0) { // 视频落后时间
         if (fabs(diff_ms) < duration * 0.1) { // 如果差距比较少就不管了
             wanted_delay = 0;
-        }else {
-            wanted_delay = (uint)(duration * 0.1); // 减少时间，尽量追上
+        } else {
+            wanted_delay = (uint) (duration * 0.1); // 减少时间，尽量追上
         }
     } else { // 视频超过时间
         if (fabs(diff_ms) < duration * 0.15) { // 如果差距比较少就不管了
             wanted_delay = 0;
-        }else { // 增加时间，尽量等待时间追上
-            if(diff_ms < duration * 0.8){
-                wanted_delay = (uint)(diff_ms * 0.8);
-            }else {
-                wanted_delay = (uint)(duration * 0.8); // 最大不超过，不然卡顿非常明显
+        } else { // 增加时间，尽量等待时间追上
+            if (diff_ms < duration * 0.8) {
+                wanted_delay = (uint) (diff_ms * 0.8);
+            } else {
+                wanted_delay = (uint) (duration * 0.8); // 最大不超过，不然卡顿非常明显
             }
         }
     }
@@ -72,9 +73,10 @@ void *Video::videoProcess(void *arg) {
     if (audio_stream_id == -1 && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
+    LOGI("videoProcess: run!!!")
     while (true) {
         do {
-//            LOGE("video_pkt_list size: %d", video_pkt_list.size())
+            LOGE("video_pkt_list size: %d", video_pkt_list.size())
             pthread_mutex_lock(&c_mutex);
             video_packet = NULL;
             if (!video_pkt_list.empty()) {
@@ -267,18 +269,24 @@ void Video::update_surface(ANativeWindow *window) {
 }
 
 void Video::release() {
-    if (video_stream_id != -1) {
-        LOGI("video pthread_join wait");
-        pthread_mutex_lock(&c_mutex);
-        thread_finish = true;
-        pthread_cond_signal(&video_cond);
-        pthread_mutex_unlock(&c_mutex);
-        pthread_join(p_video_tid, 0);
-        LOGI("video pthread_join done");
+    LOGI("video pthread_join wait");
+    pthread_mutex_lock(&c_mutex);
+    thread_finish = true;
+    pthread_cond_signal(&video_cond);
+    pthread_cond_signal(&c_cond);
+    pthread_mutex_unlock(&c_mutex);
+    pthread_join(p_video_tid, 0);
+    LOGI("video pthread_join done");
+    if (dst_data[0] != NULL) {
         av_freep(&dst_data[0]);
+        dst_data[0] = NULL;
+    }
+    if (sws_context != NULL) {
         sws_freeContext(sws_context);
+        sws_context = NULL;
     }
     updateTimeFun = NULL;
+    mWindow = NULL;
     pthread_cond_destroy(&pause_cond);
     pthread_cond_destroy(&video_cond);
     pthread_mutex_destroy(&pause_mutex);

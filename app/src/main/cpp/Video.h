@@ -25,8 +25,8 @@ public:
     void update_surface(ANativeWindow *window);
 
 private:
-    SwsContext *sws_context;
-    ANativeWindow *mWindow;
+    SwsContext *sws_context = NULL;
+    ANativeWindow *mWindow = NULL;
     OpenGL openGL;
     uint8_t *dst_data[4];
     int dst_line_size[4];

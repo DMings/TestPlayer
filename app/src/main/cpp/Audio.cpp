@@ -4,7 +4,7 @@
 
 #include "Audio.h"
 
-bool Audio::must_feed;
+bool Audio::must_feed = false;
 pthread_mutex_t Audio::a_mutex;
 pthread_cond_t Audio::a_cond;
 
@@ -52,23 +52,25 @@ int Audio::synchronize_audio(int nb_samples) {
 /**
  * 为了实现双缓冲
  */
-uint8_t **Audio::getDstData(){
-    if(chooseDstData){
+uint8_t **Audio::getDstData() {
+    if (chooseDstData) {
         chooseDstData = false;
         return &dst_data_1;
-    }else {
+    } else {
         chooseDstData = true;
         return &dst_data_2;
     }
 }
 
 void Audio::slBufferCallback() {
+    LOGI("slBufferCallback start")
     pthread_mutex_lock(&a_mutex);
     must_feed = true;
     pthread_cond_signal(&a_cond); //通知
     pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
     pthread_mutex_unlock(&a_mutex);
     //在这里之后必须要有数据
+    LOGI("slBufferCallback end")
 }
 
 
@@ -83,9 +85,10 @@ void *Audio::audioProcess(void *arg) {
     if (audio->updateTimeFun) {
         audio->updateTimeFun->jvm_attach_fun();
     }
+    LOGI("audioProcess: run!!!")
     while (true) {
         do {
-//            LOGI("audio_pkt_list size: %d", audio_pkt_list.size())
+            LOGI("audio_pkt_list size: %d", audio_pkt_list.size())
             pthread_mutex_lock(&c_mutex);
             if (!audio_pkt_list.empty()) {
                 audio_packet = audio_pkt_list.front();
@@ -261,13 +264,13 @@ int Audio::open_stream() {
             out_sample_rate = 44100;
         }
         int len_1 = av_samples_alloc(&dst_data_1, NULL,
-                                   av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
-                                   out_sample_rate,
-                                   AV_SAMPLE_FMT_S16, 1);
+                                     av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
+                                     out_sample_rate,
+                                     AV_SAMPLE_FMT_S16, 1);
         int len_2 = av_samples_alloc(&dst_data_2, NULL,
-                                   av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
-                                   out_sample_rate,
-                                   AV_SAMPLE_FMT_S16, 1);
+                                     av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
+                                     out_sample_rate,
+                                     AV_SAMPLE_FMT_S16, 1);
         LOGI("out_sample_rate: %d s: %d nb_channels:%d", out_sample_rate, len_1,
              av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO));
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
@@ -311,32 +314,37 @@ void Audio::resume() {
 }
 
 void Audio::release() {
-    if (audio_stream_id != -1) {
-        LOGI("audio pthread_join wait");
-        pthread_mutex_lock(&c_mutex);
-        thread_finish = true;
-        pthread_cond_broadcast(&audio_cond);
-        pthread_mutex_unlock(&c_mutex);
-        pthread_join(p_audio_tid, 0);
-
-        pthread_mutex_lock(&a_mutex);
-        openSL.pause();
-        pthread_cond_broadcast(&a_cond);
-        pthread_mutex_unlock(&a_mutex);
-        LOGI("audio pthread_join done");
+    LOGI("audio pthread_join wait");
+    pthread_mutex_lock(&c_mutex);
+    thread_finish = true;
+    pthread_cond_broadcast(&audio_cond);
+    pthread_cond_signal(&c_cond);
+    pthread_mutex_unlock(&c_mutex);
+    pthread_join(p_audio_tid, 0);
+    openSL.release();
+    LOGI("audio openSL.release() start");
+    pthread_mutex_lock(&a_mutex);
+    pthread_cond_broadcast(&a_cond);
+    pthread_mutex_unlock(&a_mutex);
+    LOGI("audio pthread_join done");
+    if (swr_context != NULL) {
         swr_free(&swr_context);
+        swr_context = NULL;
+    }
+    if (dst_data_1 != NULL) {
         av_freep(&dst_data_1);
+        dst_data_1 = NULL;
+    }
+    if (dst_data_2 != NULL) {
         av_freep(&dst_data_2);
+        dst_data_2 = NULL;
     }
     if (audio_dec_ctx) {
         avcodec_free_context(&audio_dec_ctx);
     }
-    LOGI("audio openSL.release()");
-    openSL.release();
-
     pthread_mutex_destroy(&pause_mutex);
     pthread_cond_destroy(&pause_cond);
     pthread_mutex_destroy(&a_mutex);
     pthread_cond_destroy(&a_cond);
-    LOGI("audio openSL.release()----");
+    LOGI("audio release");
 }

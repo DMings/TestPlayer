@@ -127,8 +127,4 @@ public class MonitorActivity extends AppCompatActivity {
         flag = false;
     }
 
-    @SuppressLint("InlinedApi")
-    protected void requiresSDPermission(final Runnable action) {
-        PermissionFragment.checkPermission(this, action);
-    }
 }

@@ -2,6 +2,7 @@ package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
 import android.os.*;
+import android.support.v7.app.AppCompatActivity;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
@@ -15,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Created by DMing at 2017/12/21 0021
  */
-public class MainActivity extends MonitorActivity {
+public class MainActivity extends AppCompatActivity {
 
     SurfaceView surfaceView;
     TextView tvSrc;
@@ -152,7 +153,7 @@ public class MainActivity extends MonitorActivity {
                     return;
                 }
                 searchPb.setVisibility(View.VISIBLE);
-                requiresSDPermission(new Runnable() {
+                PermissionFragment.checkPermission(MainActivity.this,new Runnable() {
                     @Override
                     public void run() {
                         if (!search.get()) {
@@ -163,6 +164,7 @@ public class MainActivity extends MonitorActivity {
                                     mFPlayer.searchFile(Environment.getExternalStorageDirectory().toString(), new FileAction() {
                                         @Override
                                         public void update(final String fileName) {
+                                            DLog.i("update fileName: "+fileName);
                                             handler.post(new Runnable() {
                                                 @Override
                                                 public void run() {
@@ -179,7 +181,6 @@ public class MainActivity extends MonitorActivity {
                                             searchPb.setVisibility(View.GONE);
                                         }
                                     });
-                                    search.set(false);
                                 }
                             }).start();
                         }
@@ -192,7 +193,7 @@ public class MainActivity extends MonitorActivity {
 
 
     private void playOrPause(final boolean changeFile) {
-        requiresSDPermission(new Runnable() {
+        PermissionFragment.checkPermission(this,new Runnable() {
             @Override
             public void run() {
                 if (pathName == null) {
@@ -203,8 +204,11 @@ public class MainActivity extends MonitorActivity {
                 tvSrc.setText(srcFile.getName());
                 if (changeFile) {
                     surfaceView.setVisibility(View.VISIBLE);
-                    mFPlayer.play(srcFile.toString());
-                    playBtn.setImageResource(R.drawable.ic_button_pause);
+                    if (mFPlayer.play(srcFile.toString())) {
+                        playBtn.setImageResource(R.drawable.ic_button_pause);
+                    } else {
+                        Toast.makeText(MainActivity.this, "请勿频繁操作", Toast.LENGTH_SHORT).show();
+                    }
                 } else {
                     if (mFPlayer.pauseOrResume()) {
                         playBtn.setImageResource(R.drawable.ic_button_pause);
