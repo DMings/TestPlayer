@@ -8,8 +8,8 @@ Video::Video(UpdateTimeFun *fun) {
     updateTimeFun = fun;
 }
 
-int Video::synchronize_video(double pkt_duration) { // us
-    double wanted_delay = -1;
+uint Video::synchronize_video(double pkt_duration) { // us
+    uint wanted_delay = 0;
     double diff_ms;
     double duration;
     bool is_seeking;
@@ -24,29 +24,42 @@ int Video::synchronize_video(double pkt_duration) { // us
     pthread_mutex_lock(&seek_mutex);
     is_seeking = audio_seeking;
     pthread_mutex_unlock(&seek_mutex);
+
     if (!is_seeking) {
         if (audio_stream_id != -1) {
             diff_ms = get_video_pts_clock() - get_audio_clock();
         } else {
             diff_ms = get_video_pts_clock() - get_master_clock();
         }
-    } else {
-        diff_ms = duration * 0.7;
+    } else { // 在seek的时候，音频是不可靠的，音频也在变，这时候尽量丢弃，反正都是没用的
+        diff_ms = duration * 0.3;
     }
-    if (fabs(diff_ms) >= duration * 2) {
+
+    if (audio_stream_id == -1 && fabs(diff_ms) >= duration * 2) {  // 当只有视频的时候，已经明显失去了同步，校准一下
         double time = av_gettime_relative() / 1000.0;
         set_master_clock(time - get_video_pts_clock());
         return (uint) (duration * 0.7);
     }
+
     if (diff_ms < 0) { // 视频落后时间
-        if (duration > 0 && wanted_delay < duration * 0.3) {
+        if (fabs(diff_ms) < duration * 0.1) { // 如果差距比较少就不管了
             wanted_delay = 0;
+        }else {
+            wanted_delay = (uint)(duration * 0.1); // 减少时间，尽量追上
         }
     } else { // 视频超过时间
-        wanted_delay = diff_ms * 0.7;
+        if (fabs(diff_ms) < duration * 0.15) { // 如果差距比较少就不管了
+            wanted_delay = 0;
+        }else { // 增加时间，尽量等待时间追上
+            if(diff_ms < duration * 0.8){
+                wanted_delay = (uint)(diff_ms * 0.8);
+            }else {
+                wanted_delay = (uint)(duration * 0.8); // 最大不超过，不然卡顿非常明显
+            }
+        }
     }
 //    LOGI("video diff_ms: %f wanted_delay: %f pkt_duration: %f get_video_pts_clock: %f", diff_ms, wanted_delay,pkt_duration,get_video_pts_clock());
-    return (uint) wanted_delay;
+    return wanted_delay;
 }
 
 void *Video::videoProcess(void *arg) {
@@ -195,7 +208,7 @@ void *Video::videoProcess(void *arg) {
     }
     av_frame_free(&frame);
     video->openGL.release(true);
-    LOGE("videoProcess video_pkt_list size: %d", video_pkt_list.size())
+    LOGI("videoProcess end video_pkt_list size: %d", video_pkt_list.size())
     return 0;
 }
 

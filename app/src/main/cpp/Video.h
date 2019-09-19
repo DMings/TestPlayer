@@ -40,7 +40,7 @@ private:
     //test
     double test_video_time = 0;
 
-    int synchronize_video(double pkt_duration);
+    uint synchronize_video(double pkt_duration);
 
     static void *videoProcess(void *arg);
 };

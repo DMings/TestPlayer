@@ -237,12 +237,11 @@ void *Audio::audioProcess(void *arg) {
         audio_packet = NULL;
     }
     end:
-    LOGI("pthread_join return");
     if (audio->updateTimeFun) {
         audio->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
-    cur_dst_data = NULL;
+    LOGI("audioProcess end audio_pkt_list size: %d", audio_pkt_list.size())
     return 0;
 }
 

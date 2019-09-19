@@ -179,7 +179,7 @@ void play_jni(JNIEnv *env, jclass type, jstring path_, jobject surface, jobject 
 }
 
 void seek_jni(JNIEnv *env, jclass type, jfloat percent) {
-    LOGE("percent: %f", percent);
+    LOGI("percent: %f", percent);
     seek(percent);
 }
 
@@ -224,7 +224,6 @@ JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/v
 
 jint registerNativeMethod(JNIEnv *env) {
     jclass cl = env->FindClass("com/dming/testplayer/FPlayer");
-    LOGI("sizeof(method) / sizeof(method[0]): %d", sizeof(method) / sizeof(method[0]));
     if ((env->RegisterNatives(cl, method, sizeof(method) / sizeof(method[0]))) < 0) {
         return -1;
     }
@@ -239,7 +238,7 @@ jint unRegisterNativeMethod(JNIEnv *env) {
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     native_jvm = vm;
-    LOGE("JNI_OnLoad");
+    LOGI("JNI_OnLoad");
     JNIEnv *env;
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         registerNativeMethod(env);
@@ -252,7 +251,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 }
 
 JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
-    LOGE("JNI_OnUnload");
+    LOGI("JNI_OnUnload");
     native_jvm = NULL;
     JNIEnv *env;
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
