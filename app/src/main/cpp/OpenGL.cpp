@@ -83,12 +83,16 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext, int width, 
 
 int OpenGL::updateEgl(ANativeWindow *surface) {
     if (isCreateEgl) {
-        release();
+        release(false);
         return createEgl(surface, NULL, mTexWidth, mTexHeight);
     }
+    return -1;
 }
 
-void OpenGL::release() {
+void OpenGL::release(bool reset_view) {
+    if(reset_view){
+        drawBackground();
+    }
     isCreateEgl = false;
     deleteTexture();
     if (mEglDisplay != EGL_NO_DISPLAY) {
@@ -140,6 +144,12 @@ void OpenGL::draw(void *pixels) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mTexWidth, mTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
     glRender.onDraw(mTexture);
+    eglSwapBuffers(mEglDisplay, mEglSurface);
+    GLUtils::checkErr("draw");
+}
+
+void OpenGL::drawBackground() {
+    glClear(GL_COLOR_BUFFER_BIT);
     eglSwapBuffers(mEglDisplay, mEglSurface);
     GLUtils::checkErr("draw");
 }

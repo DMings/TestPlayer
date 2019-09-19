@@ -1,23 +1,19 @@
 cmake_minimum_required(VERSION 3.4.1)
 
 set(ffmepg_src ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
-message("ffmepg_src:" ${ffmepg_src})
+#message("ffmepg_src:" ${ffmepg_src})
 
 add_library(
         fplayer
         SHARED
-#        native-lib.cpp
         OpenSL.cpp
         OpenGL.cpp
         GLRender.cpp
         GLUtils.cpp
-#        FPlayer.cpp
-#        Video.cpp
-#        Audio.cpp
         FFmpeg.cpp
-        Audio2.cpp
-        Video2.cpp
-        FPlayer2.cpp
+        Audio.cpp
+        Video.cpp
+        FPlayer.cpp
         )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)

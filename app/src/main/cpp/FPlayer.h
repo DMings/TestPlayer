@@ -5,8 +5,8 @@
 #ifndef TESTPLAYER_FFUTILS_H
 #define TESTPLAYER_FFUTILS_H
 
-#include "Audio2.h"
-#include "Video2.h"
+#include "Audio.h"
+#include "Video.h"
 
 extern int start_player(const char *src_filename, ANativeWindow *window,
         JNIEnv *env,jobject onProgressListener,jmethodID onProgress);

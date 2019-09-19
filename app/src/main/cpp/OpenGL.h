@@ -19,7 +19,8 @@ public:
     int createEgl(ANativeWindow * surface,EGLContext eglContext,int width,int height);
     int updateEgl(ANativeWindow * surface);
     void draw(void *pixels);
-    void release();
+    void drawBackground();
+    void release(bool reset_view);
 private:
     GLRender glRender;
     ANativeWindow * mWindow;

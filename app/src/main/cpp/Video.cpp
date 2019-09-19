@@ -2,7 +2,7 @@
 // Created by Administrator on 2019/9/12.
 //
 
-#include "Video2.h"
+#include "Video.h"
 
 Video::Video(UpdateTimeFun *fun) {
     updateTimeFun = fun;
@@ -96,7 +96,7 @@ void *Video::videoProcess(void *arg) {
             avcodec_flush_buffers(video_dec_ctx);
         }
 
-//        LOGE("video copy_pkg:%d", video_packet);
+//        LOGE("video copy_pkg:%p %X", video_packet);
         // 解码
 //        pthread_mutex_lock(&seek_mutex);
         ret = avcodec_send_packet(video_dec_ctx, video_packet->avPacket);
@@ -140,7 +140,7 @@ void *Video::videoProcess(void *arg) {
             }
 //            LOGI("video pts: %f get_master_clock: %f", pts, get_master_clock());
             if (video_seeking) {
-                LOGE("check_video_is_seek copy_pkg:%lld", video_packet);
+//                LOGE("check_video_is_seek copy_pkg:%p", video_packet);
                 continue;
             }
             double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
@@ -194,9 +194,8 @@ void *Video::videoProcess(void *arg) {
         video->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
-    video->openGL.release();
-    LOGE("video videoProcess");
-    LOGE("video_pkt_list size: %d", video_pkt_list.size())
+    video->openGL.release(true);
+    LOGE("videoProcess video_pkt_list size: %d", video_pkt_list.size())
     return 0;
 }
 
@@ -206,7 +205,6 @@ int Video::open_stream(ANativeWindow *window) {
                                  fmt_ctx, AVMEDIA_TYPE_VIDEO);
     if (ret >= 0) {
         video_stream = fmt_ctx->streams[video_stream_id];
-        /* allocate image where the decoded image will be put */
         LOGI("ffplay -f rawvideo -pix_fmt %s -video_size %d x %d",
              av_get_pix_fmt_name(video_dec_ctx->pix_fmt), video_dec_ctx->width, video_dec_ctx->height);
     } else {

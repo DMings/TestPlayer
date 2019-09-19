@@ -2,7 +2,7 @@
 // Created by Administrator on 2019/9/12.
 //
 
-#include "FPlayer2.h"
+#include "FPlayer.h"
 
 Video *video = NULL;
 Audio *audio = NULL;
@@ -36,14 +36,20 @@ void update_java_time_init(JNIEnv *env, jobject onProgressListener, jmethodID on
     on_progress = onProgress;
 }
 
+void refresh_finish(JNIEnv *env, jobject p_obj, jmethodID progress) {
+    ff_sec_time = 0;
+    ff_sec_duration = 0;
+    env->CallVoidMethod(p_obj, progress, ff_sec_time, ff_sec_duration);
+}
+
 int start_player(const char *src_filename, ANativeWindow *window,
-                 JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
+                 JNIEnv *env, jobject progressObj, jmethodID onProgress) {
     int ret = 0;
     bool cr;
     if (video != NULL) {
         return -3;
     }
-    update_java_time_init(env, onProgressListener, onProgress);
+    update_java_time_init(env, progressObj, onProgress);
     UpdateTimeFun updateTimeFun;
     updateTimeFun.jvm_attach_fun = jvm_attach_fun;
     updateTimeFun.update_time_fun = update_time_fun;
@@ -100,8 +106,11 @@ int start_player(const char *src_filename, ANativeWindow *window,
     delete video;
     audio = NULL;
     video = NULL;
-    avformat_flush(fmt_ctx);
     LOGI("audio.release()  video.release()");
+
+    refresh_finish(env, progressObj, onProgress);
+
+    avformat_flush(fmt_ctx);
     av_packet_free(&pkt);
     avformat_close_input(&fmt_ctx);
     pthread_cond_destroy(&c_cond);

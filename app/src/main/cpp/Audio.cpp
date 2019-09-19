@@ -2,7 +2,7 @@
 // Created by Administrator on 2019/9/12.
 //
 
-#include "Audio2.h"
+#include "Audio.h"
 
 bool Audio::must_feed;
 pthread_mutex_t Audio::a_mutex;
@@ -166,7 +166,7 @@ void *Audio::audioProcess(void *arg) {
             }
 
             if (audio_seeking) {
-//                LOGE("check_audio_is_seek copy_pkg:%lld", audio_packet);
+//                LOGE("check_audio_is_seek copy_pkg:%p", audio_packet);
                 continue;
             }
 
