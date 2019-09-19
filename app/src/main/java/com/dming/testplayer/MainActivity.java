@@ -36,7 +36,6 @@ public class MainActivity extends MonitorActivity {
     private final static int updateUI = 1;
     private ProgressBar searchPb;
     private FrameLayout fileLayout;
-    private FrameLayout baseLayout;
     private long system_time;
 
     private FPlayer mFPlayer;
@@ -77,7 +76,7 @@ public class MainActivity extends MonitorActivity {
                 playOrPause(false);
             }
         });
-        mFPlayer = new FPlayer(this, surfaceView);
+        mFPlayer = new FPlayer(surfaceView);
         mFPlayer.setOnProgressListener(new OnProgressListener() {
             @Override
             public void onProgress(long curTime, long totalTime) {
@@ -100,8 +99,7 @@ public class MainActivity extends MonitorActivity {
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                int progress = seekBar.getProgress();
-                mFPlayer.seekTime(progress);
+                mFPlayer.seekTime(1.0f * seekBar.getProgress() / seekBar.getMax());
             }
         });
         final ImageView fullBtn = findViewById(R.id.fullBtn);
@@ -118,7 +116,7 @@ public class MainActivity extends MonitorActivity {
                 removeAndPost();
             }
         });
-        baseLayout = findViewById(R.id.baseLayout);
+        FrameLayout baseLayout = findViewById(R.id.baseLayout);
         baseLayout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -204,6 +202,7 @@ public class MainActivity extends MonitorActivity {
                 File srcFile = new File(pathName);
                 tvSrc.setText(srcFile.getName());
                 if (changeFile) {
+                    surfaceView.setVisibility(View.VISIBLE);
                     mFPlayer.play(srcFile.toString());
                     playBtn.setImageResource(R.drawable.ic_button_pause);
                 } else {
@@ -269,14 +268,8 @@ public class MainActivity extends MonitorActivity {
 
     @Override
     protected void onResume() {
-        mFPlayer.onResume();
         super.onResume();
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                surfaceView.setVisibility(View.VISIBLE);
-            }
-        });
+        mFPlayer.onResume();
     }
 
 
@@ -289,12 +282,12 @@ public class MainActivity extends MonitorActivity {
 
     @Override
     public void onBackPressed() {
-//        if (System.currentTimeMillis() - system_time > 2000) {
-//            Toast.makeText(this, "再按一次退出", Toast.LENGTH_SHORT).show();
-//            system_time = System.currentTimeMillis();
-//        } else {
+        if (System.currentTimeMillis() - system_time > 2000) {
+            Toast.makeText(this, "再按一次退出", Toast.LENGTH_SHORT).show();
+            system_time = System.currentTimeMillis();
+        } else {
             finish();
-//        }
+        }
     }
 
 }

@@ -1,20 +1,19 @@
 package com.dming.testplayer;
 
-import android.content.Context;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-import android.widget.Toast;
 
 public class FPlayer implements SurfaceHolder.Callback {
 
     private OnProgressListener mOnProgressListener;
     private Surface mSurface;
     private boolean mIsPause = false;
-    private Context mContext;
+    private String mSrcPath;
+    private boolean isDelayToPlay = false;
+    private Thread mCurThread;
 
-    public FPlayer(Context context, SurfaceView surfaceView) {
-        mContext = context;
+    public FPlayer(SurfaceView surfaceView) {
         surfaceView.getHolder().addCallback(this);
     }
 
@@ -23,22 +22,11 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public void play(final String srcPath) {
+        mSrcPath = srcPath;
         if (mSurface != null) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    FPlayer.play(srcPath, mSurface, new OnProgressListener() {
-                        @Override
-                        public void onProgress(long curTime, long totalTime) {
-                            if (mOnProgressListener != null) {
-                                mOnProgressListener.onProgress(curTime, totalTime);
-                            }
-                        }
-                    });
-                }
-            }).start();
+            changeToPlay();
         } else {
-            Toast.makeText(mContext, "请稍后", Toast.LENGTH_SHORT).show();
+            isDelayToPlay = true;
         }
     }
 
@@ -77,6 +65,36 @@ public class FPlayer implements SurfaceHolder.Callback {
         return get_current_time();
     }
 
+
+    private void changeToPlay() {
+        try {
+            release();
+            mCurThread.join();
+            startPlay();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void startPlay() {
+        mCurThread = new Thread(playRunnable);
+        mCurThread.start();
+    }
+
+    private Runnable playRunnable = new Runnable() {
+        @Override
+        public void run() {
+            FPlayer.play(mSrcPath, mSurface, new OnProgressListener() {
+                @Override
+                public void onProgress(long curTime, long totalTime) {
+                    if (mOnProgressListener != null) {
+                        mOnProgressListener.onProgress(curTime, totalTime);
+                    }
+                }
+            });
+        }
+    };
+
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         mSurface = holder.getSurface();
@@ -85,7 +103,12 @@ public class FPlayer implements SurfaceHolder.Callback {
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         mSurface = holder.getSurface();
-        FPlayer.update_surface(mSurface);
+        if (isDelayToPlay) {
+            isDelayToPlay = false;
+            startPlay();
+        } else {
+            FPlayer.update_surface(mSurface);
+        }
     }
 
     @Override
