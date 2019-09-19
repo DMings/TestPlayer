@@ -28,6 +28,7 @@
 
 static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGE("***slBufferCallback *** %X <====> %d", pthread_self(), gettid());
+    LOGI("OpenSL slBufferCallback>>>>>");
     SLuint32 pState;
     OpenSL *openSL = (OpenSL *) context;
     (*openSL->bqPlayerPlay)->GetPlayState(openSL->bqPlayerPlay, &pState);
@@ -212,6 +213,7 @@ void OpenSL::pause() {
 }
 
 void OpenSL::release() {
+    LOGI("OpenSL release>>>>>");
     //设置停止状态
     if (bqPlayerPlay) {
         (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_STOPPED);

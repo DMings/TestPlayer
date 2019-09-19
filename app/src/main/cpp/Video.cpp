@@ -216,6 +216,9 @@ void *Video::videoProcess(void *arg) {
 
 int Video::open_stream(ANativeWindow *window) {
     mWindow = window;
+    pthread_cond_init(&video_cond, NULL);
+    pthread_cond_init(&pause_cond, NULL);
+    pthread_mutex_init(&pause_mutex, NULL);
     int ret = open_codec_context(&video_stream_id, &video_dec_ctx,
                                  fmt_ctx, AVMEDIA_TYPE_VIDEO);
     if (ret >= 0) {
@@ -225,9 +228,6 @@ int Video::open_stream(ANativeWindow *window) {
     } else {
         video_stream_id = -1;
     }
-    pthread_cond_init(&video_cond, NULL);
-    pthread_cond_init(&pause_cond, NULL);
-    pthread_mutex_init(&pause_mutex, NULL);
     if (video_stream) {
         AVRational rational = video_stream->r_frame_rate;
         LOGI("rational: %d => %d", rational.den, rational.num);
@@ -254,10 +254,12 @@ void Video::pause() {
 }
 
 void Video::resume() {
+    LOGI("Video resume start")
     pthread_mutex_lock(&pause_mutex);
     is_pause = false;
     pthread_cond_signal(&pause_cond);
     pthread_mutex_unlock(&pause_mutex);
+    LOGI("Video resume end")
 }
 
 
@@ -293,4 +295,5 @@ void Video::release() {
     if (video_dec_ctx) {
         avcodec_free_context(&video_dec_ctx);
     }
+    LOGI("video release");
 }
