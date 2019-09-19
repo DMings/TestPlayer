@@ -14,6 +14,7 @@ add_library(
         Audio.cpp
         Video.cpp
         FPlayer.cpp
+        SearchFile.cpp
         )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)

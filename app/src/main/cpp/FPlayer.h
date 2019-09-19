@@ -7,6 +7,7 @@
 
 #include "Audio.h"
 #include "Video.h"
+#include "SearchFile.h"
 
 extern int start_player(const char *src_filename, ANativeWindow *window,
         JNIEnv *env,jobject onProgressListener,jmethodID onProgress);

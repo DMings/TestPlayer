@@ -208,6 +208,14 @@ jlong get_duration_time_jni(JNIEnv *env, jclass type) {
     return get_duration_time();
 }
 
+void scan_file_jni(JNIEnv *env, jclass type, jstring file_path_, jobject fa_obj) {
+    const char *path = env->GetStringUTFChars(file_path_, 0);
+    jclass fileAction = env->GetObjectClass(fa_obj);
+    jmethodID updateFile = env->GetMethodID(fileAction, "update", "(Ljava/lang/String;)V");
+    scan_file(env, fa_obj, updateFile, path);
+    env->ReleaseStringUTFChars(file_path_, path);
+}
+
 // 动态注册需要制定具体类型名，静态又不用
 //Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,jobject onProgressListener)
 //"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
@@ -219,7 +227,8 @@ JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/v
                             {"update_surface",    "(Landroid/view/Surface;)V",                                                            (void *) update_surface_jni},
                             {"release",           "()V",                                                                                  (void *) release_jni},
                             {"get_current_time",  "()J",                                                                                  (void *) get_current_time_jni},
-                            {"get_duration_time", "()J",                                                                                  (void *) get_duration_time_jni}
+                            {"get_duration_time", "()J",                                                                                  (void *) get_duration_time_jni},
+                            {"scan_file",         "(Ljava/lang/String;Lcom/dming/testplayer/FileAction;)V",                               (void *) scan_file_jni},
 };
 
 jint registerNativeMethod(JNIEnv *env) {
