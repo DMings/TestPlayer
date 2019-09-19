@@ -37,7 +37,7 @@ void update_java_time_init(JNIEnv *env, jobject onProgressListener, jmethodID on
 }
 
 int start_player(const char *src_filename, ANativeWindow *window,
-         JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
+                 JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
     int ret = 0;
     bool cr;
     if (video != NULL) {
@@ -158,6 +158,7 @@ int64_t get_duration_time() {
     return ff_sec_duration;
 }
 
+////// jni ///////////////////////////////////////////////////////////
 
 void play_jni(JNIEnv *env, jclass type, jstring path_, jobject surface, jobject onProgressListener) {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
@@ -198,18 +199,23 @@ jlong get_duration_time_jni(JNIEnv *env, jclass type) {
     return get_duration_time();
 }
 
-JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V", (void *) play_jni},
-                            {"seek",              "(F)V",                                                      (void *) seek_jni},
-                            {"pause",             "()V",                                                       (void *) pause_jni},
-                            {"resume",            "()V",                                                       (void *) resume_jni},
-                            {"update_surface",    "(Ljava/lang/Object;)V",                                     (void *) update_surface_jni},
-                            {"release",           "()V",                                                       (void *) release_jni},
-                            {"get_current_time",  "()J",                                                       (void *) get_current_time_jni},
-                            {"get_duration_time", "()J",                                                       (void *) get_duration_time_jni}
+// 动态注册需要制定具体类型名，静态又不用
+//Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,jobject onProgressListener)
+//"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
+
+JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V", (void *) play_jni},
+                            {"seek",              "(F)V",                                                                                 (void *) seek_jni},
+                            {"pause",             "()V",                                                                                  (void *) pause_jni},
+                            {"resume",            "()V",                                                                                  (void *) resume_jni},
+                            {"update_surface",    "(Landroid/view/Surface;)V",                                                            (void *) update_surface_jni},
+                            {"release",           "()V",                                                                                  (void *) release_jni},
+                            {"get_current_time",  "()J",                                                                                  (void *) get_current_time_jni},
+                            {"get_duration_time", "()J",                                                                                  (void *) get_duration_time_jni}
 };
 
 jint registerNativeMethod(JNIEnv *env) {
     jclass cl = env->FindClass("com/dming/testplayer/FPlayer");
+    LOGI("sizeof(method) / sizeof(method[0]): %d", sizeof(method) / sizeof(method[0]));
     if ((env->RegisterNatives(cl, method, sizeof(method) / sizeof(method[0]))) < 0) {
         return -1;
     }
@@ -226,14 +232,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     native_jvm = vm;
     LOGE("JNI_OnLoad");
     JNIEnv *env;
-//    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
-//        registerNativeMethod(env);
-//        LOGE("JNI_OnLoad JNI_VERSION_1_6");
-//        return JNI_VERSION_1_6;
-//    } // JNI_VERSION_1_4;
-    if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
+    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         registerNativeMethod(env);
-        LOGE("JNI_OnLoad JNI_VERSION_1_4");
+        return JNI_VERSION_1_6;
+    } else if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
+        registerNativeMethod(env);
         return JNI_VERSION_1_4;
     }
     return JNI_ERR;
@@ -243,10 +246,9 @@ JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
     LOGE("JNI_OnUnload");
     native_jvm = NULL;
     JNIEnv *env;
-//    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
-//        unRegisterNativeMethod(env);
-//    } // JNI_VERSION_1_4;
-    if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
+    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
+        unRegisterNativeMethod(env);
+    } else if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
         unRegisterNativeMethod(env);
     }
 }

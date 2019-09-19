@@ -1,4 +1,4 @@
-package com.dming.testplayer.gl;
+package com.dming.testplayer;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -99,7 +99,7 @@ public class TestActivity extends AppCompatActivity {
         mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-
+                curTimeTv.setText(DUtils.secToTime((long) (1.0f * seekBar.getProgress() / seekBar.getMax() * FPlayer.get_duration_time())));
             }
 
             @Override

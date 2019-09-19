@@ -32,9 +32,14 @@ public:
 
 private:
     static void *audioProcess(void *arg);
+
+    uint8_t **getDstData();
+
+    bool chooseDstData = false;
     OpenSL openSL;
     SwrContext *swr_context;
-    uint8_t *dst_data;
+    uint8_t *dst_data_1;
+    uint8_t *dst_data_2;
     pthread_t p_audio_tid;
     bool thread_finish = false;
     UpdateTimeFun *updateTimeFun = NULL;
