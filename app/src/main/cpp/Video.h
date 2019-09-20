@@ -30,7 +30,7 @@ private:
     OpenGL openGL;
     uint8_t *dst_data[4];
     int dst_line_size[4];
-    pthread_t p_video_tid;
+    pthread_t p_video_tid = 0;
     bool thread_finish = false;
     bool is_pause = false;
     pthread_cond_t pause_cond;

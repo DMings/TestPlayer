@@ -39,7 +39,7 @@ private:
     SwrContext *swr_context = NULL;
     uint8_t *dst_data_1 = NULL;
     uint8_t *dst_data_2 = NULL;
-    pthread_t p_audio_tid;
+    pthread_t p_audio_tid = 0;
     bool thread_finish = false;
     UpdateTimeFun *updateTimeFun = NULL;
     pthread_cond_t pause_cond;

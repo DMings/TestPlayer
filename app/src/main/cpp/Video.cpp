@@ -169,7 +169,7 @@ void *Video::videoProcess(void *arg) {
 //                 pkt_duration);
             set_video_clock(pts);
             if (audio_stream_id == -1) { // 更新当前时间
-                ff_sec_time = (int64_t) (pts / 1000);
+                ff_sec_time = (int32_t) (pts / 1000);
                 if (ff_last_sec_time != ff_sec_time && video->updateTimeFun) {
                     video->updateTimeFun->update_time_fun();
                 }
@@ -277,7 +277,9 @@ void Video::release() {
     pthread_cond_signal(&video_cond);
     pthread_cond_signal(&c_cond);
     pthread_mutex_unlock(&c_mutex);
-    pthread_join(p_video_tid, 0);
+    if(p_video_tid){
+        pthread_join(p_video_tid, 0);
+    }
     LOGI("video pthread_join done");
     if (dst_data[0] != NULL) {
         av_freep(&dst_data[0]);
