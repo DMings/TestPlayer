@@ -4,12 +4,13 @@
 
 #include "Audio.h"
 
-bool Audio::must_feed = false;
-pthread_mutex_t* Audio::a_mutex = NULL;
-pthread_cond_t* Audio::a_cond = NULL;
+int Audio::must_feed = 0;
+pthread_mutex_t Audio::a_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t Audio::a_cond = PTHREAD_COND_INITIALIZER;
 
 Audio::Audio(UpdateTimeFun *fun) {
     LOGI("Audio must_feed: %d ",must_feed)
+    must_feed = 0;
     updateTimeFun = fun;
 }
 
@@ -64,12 +65,14 @@ uint8_t **Audio::getDstData() {
 }
 
 void Audio::slBufferCallback() {
-    LOGI("slBufferCallback start")
-    pthread_mutex_lock(a_mutex);
-    must_feed = true;
-    pthread_cond_signal(a_cond); //通知
-    pthread_cond_wait(a_cond, a_mutex); // 等待回调
-    pthread_mutex_unlock(a_mutex);
+//    LOGI("slBufferCallback start")
+    pthread_mutex_lock(&a_mutex);
+    if(must_feed != -1){
+        must_feed = 1;
+        pthread_cond_signal(&a_cond); //通知
+        pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
+    }
+    pthread_mutex_unlock(&a_mutex);
     //在这里之后必须要有数据
     LOGI("slBufferCallback end")
 }
@@ -191,11 +194,11 @@ void *Audio::audioProcess(void *arg) {
             ret = swr_convert(audio->swr_context, cur_dst_data, wanted_nb_samples,
                               (const uint8_t **) frame->data, frame->nb_samples);
 
-            pthread_mutex_lock(a_mutex);
-            if (!must_feed) {
-                pthread_cond_wait(a_cond, a_mutex); // 等待回调
+            pthread_mutex_lock(&a_mutex);
+            if (must_feed == 0) {
+                pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
             }
-            must_feed = false;
+            must_feed = 0;
             // 到这里必须要有sl数据
             set_audio_clock(pts);// ms
 //            LOGI("audio pts: %f get_master_clock: %f", pts, get_master_clock());
@@ -226,8 +229,8 @@ void *Audio::audioProcess(void *arg) {
             } else {
                 LOGE("swr_convert err = %d", ret);
             }
-            pthread_cond_signal(a_cond);
-            pthread_mutex_unlock(a_mutex);
+            pthread_cond_signal(&a_cond);
+            pthread_mutex_unlock(&a_mutex);
 
             pthread_mutex_lock(&audio->pause_mutex);
             if (audio->is_pause) {
@@ -251,8 +254,6 @@ void *Audio::audioProcess(void *arg) {
 int Audio::open_stream() {
     static SLConfigure slConfigure;
     pthread_cond_init(&audio_cond, NULL);
-    pthread_mutex_init(a_mutex, NULL);
-    pthread_cond_init(a_cond, NULL);
     pthread_cond_init(&pause_cond, NULL);
     pthread_mutex_init(&pause_mutex, NULL);
     int ret = open_codec_context(&audio_stream_id, &audio_dec_ctx,
@@ -324,11 +325,15 @@ void Audio::release() {
     pthread_cond_signal(&c_cond);
     pthread_mutex_unlock(&c_mutex);
     pthread_join(p_audio_tid, 0);
+    LOGI("audio openSL.unlock");
+    pthread_mutex_lock(&a_mutex);
+    must_feed = -1;
+    pthread_cond_broadcast(&a_cond);
+    pthread_mutex_unlock(&a_mutex);
+    LOGI("audio openSL.release");
+    // 内部必定有等待 slBufferCallback结束的，应该是让内部线程结束，所以释放之前要确保不堵塞它的线程
+    // 先解锁，再释放
     openSL.release();
-    LOGI("audio openSL.release() start");
-    pthread_mutex_lock(a_mutex);
-    pthread_cond_broadcast(a_cond);
-    pthread_mutex_unlock(a_mutex);
     LOGI("audio pthread_join done");
     if (swr_context != NULL) {
         swr_free(&swr_context);
@@ -349,9 +354,5 @@ void Audio::release() {
     pthread_cond_destroy(&audio_cond);
     pthread_mutex_destroy(&pause_mutex);
     pthread_cond_destroy(&pause_cond);
-    pthread_mutex_destroy(a_mutex);
-    pthread_cond_destroy(a_cond);
-    a_mutex = NULL;
-    a_cond = NULL;
     LOGI("audio release");
 }

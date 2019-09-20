@@ -26,9 +26,9 @@ public:
 
     void release();
 
-    static bool must_feed;
-    static pthread_mutex_t* a_mutex;
-    static pthread_cond_t* a_cond;
+    static int must_feed;
+    static pthread_mutex_t a_mutex;
+    static pthread_cond_t a_cond;
 private:
     static void *audioProcess(void *arg);
 
