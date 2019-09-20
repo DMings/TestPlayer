@@ -3,57 +3,61 @@ package com.dming.testplayer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
+import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FPlayer implements SurfaceHolder.Callback {
-
+    public static class PlayStatus {
+        public static int IDLE = 0;
+        public static int PREPARE = 1;
+        public static int PLAYING = 2;
+        public static int STOPPING = 3;
+    }
     private OnProgressListener mOnProgressListener;
     private Surface mSurface;
-    private boolean mIsPause = false;
     private String mSrcPath;
     private boolean isDelayToPlay = false;
-    private HandlerThread mHandlerThread;
-    private Handler mHandler;
-    private AtomicInteger mPlayCount = new AtomicInteger(0);
+    private HandlerThread mPlayThread;
+    private Handler mPlayHandler;
+//    private Lock mLock = new ReentrantLock();
+    private Runnable mPrepareRunnable;
+    private AtomicBoolean mPlayFinish = new AtomicBoolean(true);
+    private Handler mMainHandle = new Handler(Looper.getMainLooper());
 
     public FPlayer(SurfaceView surfaceView) {
         surfaceView.getHolder().addCallback(this);
-        mHandlerThread = new HandlerThread("FPlayer");
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
+        mPlayThread = new HandlerThread("FPlayer");
+        mPlayThread.start();
+        mPlayHandler = new Handler(mPlayThread.getLooper());
     }
 
     public void setOnProgressListener(OnProgressListener onProgressListener) {
         mOnProgressListener = onProgressListener;
     }
 
-    public boolean play(final String srcPath) {
+    public boolean play(final String srcPath, Runnable prepareRunnable) {
         mSrcPath = srcPath;
-        if (mSurface != null) {
-            return changeToPlay();
-        } else {
-            isDelayToPlay = true;
+        mPrepareRunnable = prepareRunnable;
+        if (mPlayFinish.get()) {
+            mPlayFinish.set(false);
+            if (mSurface != null) {
+                changeToPlay();
+            } else {
+                isDelayToPlay = true;
+            }
             return true;
+        } else {
+            return false;
         }
     }
 
     public void searchFile(String path, FileAction fileAction) {
         scan_file(path, fileAction);
-    }
-
-    public boolean pauseOrResume() {
-        if (mIsPause) {
-            mIsPause = false;
-            resume();
-        } else {
-            mIsPause = true;
-            pause();
-        }
-        return mIsPause;
     }
 
     public void seekTime(float percent) {
@@ -71,12 +75,12 @@ public class FPlayer implements SurfaceHolder.Callback {
     public void onDestroy() {
         release();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            mHandlerThread.quitSafely();
+            mPlayThread.quitSafely();
         } else {
-            mHandlerThread.quit();
+            mPlayThread.quit();
         }
         try {
-            mHandlerThread.join(1000);
+            mPlayThread.join();
         } catch (InterruptedException e) {
             DLog.e("Join encountered an error!");
         }
@@ -87,34 +91,40 @@ public class FPlayer implements SurfaceHolder.Callback {
         return get_current_time();
     }
 
+    public int getPlayState() {
+        int s = get_play_state();
+        Log.i("DMFF","getPlayState:     "+s);
+        return s;
+    }
 
-    private boolean changeToPlay() {
-        DLog.e("changeToPlay: "+Thread.currentThread());
-        if (mPlayCount.get() <= 1) {
-            release();
-            mHandler.post(playRunnable);
-            return true;
-        } else {
-            return false;
-        }
+    private void changeToPlay() {
+        release();
+        startPlay();
+    }
+
+    private void startPlay() {
+        mPlayHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                mPlayFinish.set(true);
+                mMainHandle.post(mPrepareRunnable);
+            }
+        });
+        mPlayHandler.post(playRunnable);
     }
 
 
     private Runnable playRunnable = new Runnable() {
         @Override
         public void run() {
-            mPlayCount.getAndAdd(1);
-            DLog.e("-mPlayCount: "+mPlayCount.get());
             FPlayer.play(mSrcPath, mSurface, new OnProgressListener() {
                 @Override
-                public void onProgress(long curTime, long totalTime) {
+                public void onProgress(int curTime, int totalTime) {
                     if (mOnProgressListener != null) {
                         mOnProgressListener.onProgress(curTime, totalTime);
                     }
                 }
             });
-            mPlayCount.getAndAdd(-1);
-            DLog.e("+mPlayCount: "+mPlayCount.get());
         }
     };
 
@@ -128,7 +138,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         mSurface = holder.getSurface();
         if (isDelayToPlay) {
             isDelayToPlay = false;
-            mHandler.post(playRunnable);
+            startPlay();
         } else {
             FPlayer.update_surface(mSurface);
         }
@@ -154,6 +164,8 @@ public class FPlayer implements SurfaceHolder.Callback {
     public static native void pause();
 
     public static native void resume();
+
+    public static native int get_play_state();
 
     public static native void update_surface(Surface surface);
 

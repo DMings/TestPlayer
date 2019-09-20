@@ -41,9 +41,9 @@ AVCodecContext *audio_dec_ctx = NULL;
 
 bool crash_error = false;
 
-int64_t ff_sec_time = 0; // 当前时间
-int64_t ff_last_sec_time = 0; // 上次当前时间，用于减少call java次数
-int64_t ff_sec_duration = 0; // 总时间
+int32_t ff_sec_time = 0; // 当前时间
+int32_t ff_last_sec_time = 0; // 上次当前时间，用于减少call java次数
+int32_t ff_sec_duration = 0; // 总时间
 
 int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                        AVFormatContext *fmt_ctx, enum AVMediaType type) {

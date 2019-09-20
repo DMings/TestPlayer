@@ -145,7 +145,6 @@ void *Audio::audioProcess(void *arg) {
             break;
         }
         while (ret >= 0) {
-
 //            audio->test_audio_time = (av_gettime_relative() / 1000.0);
             ret = avcodec_receive_frame(audio_dec_ctx, frame);
 //            LOGI("avcodec_receive_frame cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));

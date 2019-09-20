@@ -50,7 +50,7 @@ public class TestActivity extends AppCompatActivity {
 //                        String srcPath = new File(Environment.getExternalStorageDirectory(), "1/animation.mp4").getPath();
                         FPlayer.play(srcPath, mSurface, new OnProgressListener() {
                             @Override
-                            public void onProgress(final long curTime, final long totalTime) {
+                            public void onProgress(final int curTime, final int totalTime) {
                                 if (!mSeeking) {
                                     runOnUiThread(new Runnable() {
                                         @Override

@@ -5,10 +5,10 @@
 #include "FPlayer.h"
 
 enum PlayStatus {
-    IDLE, PREPARE, PLAYING,
+    IDLE, PREPARE, PLAYING, STOPPING,
 };
 PlayStatus play_status = IDLE;
-pthread_mutex_t play_mutex;
+pthread_mutex_t play_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 Video *video = NULL;
 Audio *audio = NULL;
@@ -46,7 +46,7 @@ void update_java_time_init(JNIEnv *env, jobject onProgressListener, jmethodID on
 void refresh_finish(JNIEnv *env, jobject p_obj, jmethodID progress) {
     ff_sec_time = 0;
     ff_sec_duration = 0;
-    env->CallVoidMethod(p_obj, progress, ff_sec_time, ff_sec_duration);
+    env->CallVoidMethod(p_obj, progress, -1, ff_sec_duration);
 }
 
 int start_player(const char *src_filename, ANativeWindow *window,
@@ -70,7 +70,6 @@ int start_player(const char *src_filename, ANativeWindow *window,
     audio = new Audio(&updateTimeFun);
     AVPacket *pkt = av_packet_alloc();
     LOGI("avformat_open_input %s", src_filename);
-    /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
         LOGE("Could not open source file %s", src_filename);
         pthread_mutex_lock(&play_mutex);
@@ -78,7 +77,6 @@ int start_player(const char *src_filename, ANativeWindow *window,
         pthread_mutex_unlock(&play_mutex);
         return -1;
     }
-    /* retrieve stream information */
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         LOGE("Could not find stream information");
         pthread_mutex_lock(&play_mutex);
@@ -121,6 +119,10 @@ int start_player(const char *src_filename, ANativeWindow *window,
     } else {
         LOGE("Could not find audio or video stream in the input, aborting");
     }
+    pthread_mutex_lock(&play_mutex);
+    play_status = STOPPING;
+    LOGE("release play_status: %d", play_status);
+    pthread_mutex_unlock(&play_mutex);
     audio->release();
     video->release();
     delete audio;
@@ -185,8 +187,8 @@ void update_surface(ANativeWindow *window) {
 
 void release() {
     pthread_mutex_lock(&play_mutex);
-    LOGE("play_status: %d",play_status);
-    if (play_status != IDLE) {
+    LOGE("play_status: %d", play_status);
+    if (play_status != IDLE && play_status != STOPPING) {
         if (!crash_error && (video_stream_id != -1 || audio_stream_id != -1)) {
             if (video && video_stream_id != -1) {
                 video->resume();
@@ -216,7 +218,7 @@ void play_jni(JNIEnv *env, jclass type, jstring path_, jobject surface, jobject 
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     const char *path = env->GetStringUTFChars(path_, NULL);
     jclass plClass = env->GetObjectClass(onProgressListener);
-    jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(JJ)V");
+    jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(II)V");
     start_player(path, window, env, onProgressListener, onProgress);
     env->ReleaseStringUTFChars(path_, path);
 }
@@ -259,6 +261,14 @@ void scan_file_jni(JNIEnv *env, jclass type, jstring file_path_, jobject fa_obj)
     env->ReleaseStringUTFChars(file_path_, path);
 }
 
+jint get_play_state_jni(JNIEnv *env, jclass type) {
+    int state;
+    pthread_mutex_lock(&play_mutex);
+    state = play_status;
+    pthread_mutex_unlock(&play_mutex);
+    return state;
+}
+
 // 动态注册需要制定具体类型名，静态又不用
 //Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,jobject onProgressListener)
 //"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
@@ -272,6 +282,7 @@ JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/v
                             {"get_current_time",  "()J",                                                                                  (void *) get_current_time_jni},
                             {"get_duration_time", "()J",                                                                                  (void *) get_duration_time_jni},
                             {"scan_file",         "(Ljava/lang/String;Lcom/dming/testplayer/FileAction;)V",                               (void *) scan_file_jni},
+                            {"get_play_state",    "()I",                                                                                  (void *) get_play_state_jni},
 };
 
 jint registerNativeMethod(JNIEnv *env) {
