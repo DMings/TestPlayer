@@ -14,7 +14,7 @@ uint Video::synchronize_video(double pkt_duration) { // us
     double diff_ms;
     double duration;
     bool is_seeking;
-    AVRational rational = video_stream->r_frame_rate;
+    AVRational rational = av_stream->r_frame_rate;
     int video_base = (int) 1000.0 * rational.den / rational.num;
     if (video_base) {
         duration = video_base;
@@ -27,7 +27,7 @@ uint Video::synchronize_video(double pkt_duration) { // us
     pthread_mutex_unlock(&seek_mutex);
 
     if (!is_seeking) {
-        if (audio_stream_id != -1) {
+        if (has_audio) {
             diff_ms = get_video_pts_clock() - get_audio_clock();
         } else {
             diff_ms = get_video_pts_clock() - get_master_clock();
@@ -36,7 +36,7 @@ uint Video::synchronize_video(double pkt_duration) { // us
         diff_ms = duration * 0.3;
     }
 
-    if (audio_stream_id == -1 && fabs(diff_ms) >= duration * 2) {  // 当只有视频的时候，已经明显失去了同步，校准一下
+    if (!has_audio && fabs(diff_ms) >= duration * 2) {  // 当只有视频的时候，已经明显失去了同步，校准一下
         double time = av_gettime_relative() / 1000.0;
         set_master_clock(time - get_video_pts_clock());
         return (uint) (duration * 0.7);
@@ -69,14 +69,16 @@ void *Video::videoProcess(void *arg) {
     bool checkout_time = false;
     Video *video = (Video *) arg;
     FPacket *video_packet = NULL;
-    video->openGL.createEgl(video->mWindow, NULL, video_dec_ctx->width, video_dec_ctx->height);
-    if (audio_stream_id == -1 && video->updateTimeFun) {
+    video->openGL.createEgl(video->mWindow, NULL,
+                            video->view_width, video->view_height,
+                            video->av_dec_ctx->width, video->av_dec_ctx->height);
+    if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
     LOGI("videoProcess: run!!!")
     while (true) {
         do {
-            LOGE("video_pkt_list size: %d", video_pkt_list.size())
+//            LOGE("video_pkt_list size: %d", video_pkt_list.size())
             pthread_mutex_lock(&c_mutex);
             video_packet = NULL;
             if (!video_pkt_list.empty()) {
@@ -108,13 +110,13 @@ void *Video::videoProcess(void *arg) {
 
         if (video_packet->checkout_time) {
             checkout_time = true;
-            avcodec_flush_buffers(video_dec_ctx);
+            avcodec_flush_buffers(video->av_dec_ctx);
         }
 
 //        LOGE("video copy_pkg:%p %X", video_packet);
         // 解码
 //        pthread_mutex_lock(&seek_mutex);
-        ret = avcodec_send_packet(video_dec_ctx, video_packet->avPacket);
+        ret = avcodec_send_packet(video->av_dec_ctx, video_packet->avPacket);
 //        pthread_mutex_unlock(&seek_mutex);
         if (ret < 0) {
             LOGE("Error video sending a packet for decoding video_pkt_list size: %d", video_pkt_list.size());
@@ -129,7 +131,7 @@ void *Video::videoProcess(void *arg) {
         }
         while (ret >= 0) {
 //            pthread_mutex_lock(&seek_mutex);
-            ret = avcodec_receive_frame(video_dec_ctx, frame);
+            ret = avcodec_receive_frame(video->av_dec_ctx, frame);
 //            pthread_mutex_unlock(&seek_mutex);
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
@@ -141,13 +143,13 @@ void *Video::videoProcess(void *arg) {
                 LOGE("video legitimate decoding errors");
                 break;
             }
-            //  用 st 上的时基才对 video_stream
-            double pts = (int64_t) (av_q2d(video_stream->time_base) * frame->pts * 1000.0); // ms
+            //  用 st 上的时基才对 av_stream
+            double pts = (int64_t) (av_q2d(video->av_stream->time_base) * frame->pts * 1000.0); // ms
             if (checkout_time) {
                 checkout_time = false;
                 pthread_mutex_lock(&seek_mutex);
                 video_seeking = false;
-                if (audio_stream_id == -1) { // 校准时间
+                if (!video->has_audio) { // 校准时间
                     double time = av_gettime_relative() / 1000.0;
                     set_master_clock(time - pts);
                 }
@@ -158,17 +160,17 @@ void *Video::videoProcess(void *arg) {
 //                LOGE("check_video_is_seek copy_pkg:%p", video_packet);
                 continue;
             }
-            double pkt_duration = (int64_t) (av_q2d(video_stream->time_base) * frame->pkt_duration * 1000.0); // ms
+            double pkt_duration = (int64_t) (av_q2d(video->av_stream->time_base) * frame->pkt_duration * 1000.0); // ms
             ret = sws_scale(video->sws_context,
                             (const uint8_t *const *) frame->data, frame->linesize,
-                            0, video_dec_ctx->height,
+                            0, video->av_dec_ctx->height,
                             video->dst_data, video->dst_line_size);
 //            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
 //                 get_audio_clock(),
 //                 get_master_clock(),
 //                 pkt_duration);
             set_video_clock(pts);
-            if (audio_stream_id == -1) { // 更新当前时间
+            if (!video->has_audio) { // 更新当前时间
                 ff_sec_time = (int32_t) (pts / 1000);
                 if (ff_last_sec_time != ff_sec_time && video->updateTimeFun) {
                     video->updateTimeFun->update_time_fun();
@@ -176,8 +178,8 @@ void *Video::videoProcess(void *arg) {
                 ff_last_sec_time = ff_sec_time;
             }
             int delay = video->synchronize_video(pkt_duration); // ms
-//            LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
-//                 (get_master_clock() - video->test_video_time));
+            LOGI("video delay->%d pts: %f get_master_clock: %f video_time: %f", delay, pts, get_master_clock(),
+                 (get_master_clock() - video->test_video_time));
             if (delay >= 0) {
                 av_usleep((uint) delay * 1000); // us
 //                LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
@@ -188,7 +190,7 @@ void *Video::videoProcess(void *arg) {
             pthread_mutex_lock(&c_mutex);
             if (video->will_update_surface) {
                 video->will_update_surface = false;
-                video->openGL.updateEgl(video->mWindow);
+                video->openGL.updateEgl(video->mWindow, video->view_width, video->view_height);
             }
             pthread_mutex_unlock(&c_mutex);
 
@@ -205,7 +207,7 @@ void *Video::videoProcess(void *arg) {
         free_packet(video_packet);
     }
     end:
-    if (audio_stream_id == -1 && video->updateTimeFun) {
+    if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
@@ -214,31 +216,39 @@ void *Video::videoProcess(void *arg) {
     return 0;
 }
 
-int Video::open_stream(ANativeWindow *window) {
+int Video::open_stream(ANativeWindow *window, bool hasAudio) {
     mWindow = window;
+    has_audio = hasAudio;
     pthread_cond_init(&video_cond, NULL);
     pthread_cond_init(&pause_cond, NULL);
     pthread_mutex_init(&pause_mutex, NULL);
-    int ret = open_codec_context(&video_stream_id, &video_dec_ctx,
+    int ret = open_codec_context(&stream_id, &av_dec_ctx,
                                  fmt_ctx, AVMEDIA_TYPE_VIDEO);
     if (ret >= 0) {
-        video_stream = fmt_ctx->streams[video_stream_id];
+        int nb_cpu_s = av_cpu_count();
+        if (nb_cpu_s == 0) {
+            nb_cpu_s = 8;
+        }
+        av_dec_ctx->thread_count = nb_cpu_s;
+        LOGI("nb_cpu_s: %d", nb_cpu_s);
+        av_stream = fmt_ctx->streams[stream_id];
         LOGI("ffplay -f rawvideo -pix_fmt %s -video_size %d x %d",
-             av_get_pix_fmt_name(video_dec_ctx->pix_fmt), video_dec_ctx->width, video_dec_ctx->height);
+             av_get_pix_fmt_name(av_dec_ctx->pix_fmt), av_dec_ctx->width, av_dec_ctx->height);
     } else {
-        video_stream_id = -1;
+        stream_id = -1;
     }
-    if (video_stream) {
-        AVRational rational = video_stream->r_frame_rate;
+    if (av_stream) {
+        AVRational rational = av_stream->r_frame_rate;
         LOGI("rational: %d => %d", rational.den, rational.num);
         sws_context = sws_getContext(
-                video_dec_ctx->width, video_dec_ctx->height, video_dec_ctx->pix_fmt,
-                video_dec_ctx->width, video_dec_ctx->height, AV_PIX_FMT_RGBA,
+                av_dec_ctx->width, av_dec_ctx->height, av_dec_ctx->pix_fmt,
+                av_dec_ctx->width, av_dec_ctx->height, AV_PIX_FMT_RGBA,
                 SWS_BILINEAR, NULL, NULL, NULL);
         if ((ret = av_image_alloc(dst_data, dst_line_size,
-                                  video_dec_ctx->width, video_dec_ctx->height,
+                                  av_dec_ctx->width, av_dec_ctx->height,
                                   AV_PIX_FMT_RGBA, 1)) < 0) {
             LOGE("Could not allocate destination image: %d", ret);
+            stream_id = -1;
         } else {
             LOGI("dst_data size: %d", ret);
             pthread_create(&p_video_tid, 0, Video::videoProcess, this);
@@ -277,7 +287,7 @@ void Video::release() {
     pthread_cond_signal(&video_cond);
     pthread_cond_signal(&c_cond);
     pthread_mutex_unlock(&c_mutex);
-    if(p_video_tid){
+    if (p_video_tid) {
         pthread_join(p_video_tid, 0);
     }
     LOGI("video pthread_join done");
@@ -289,13 +299,17 @@ void Video::release() {
         sws_freeContext(sws_context);
         sws_context = NULL;
     }
-    updateTimeFun = NULL;
-    mWindow = NULL;
     pthread_cond_destroy(&pause_cond);
     pthread_cond_destroy(&video_cond);
     pthread_mutex_destroy(&pause_mutex);
-    if (video_dec_ctx) {
-        avcodec_free_context(&video_dec_ctx);
+    if (av_dec_ctx) {
+        avcodec_free_context(&av_dec_ctx);
     }
+    updateTimeFun = NULL;
+    mWindow = NULL;
+    stream_id = 0;
+    has_audio = false;
+    av_stream = NULL;
+    av_dec_ctx = NULL;
     LOGI("video release");
 }

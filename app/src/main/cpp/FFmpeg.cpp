@@ -6,9 +6,6 @@
 
 AVFormatContext *fmt_ctx = NULL;
 
-int video_stream_id = -1;
-int audio_stream_id = -1;
-
 pthread_cond_t c_cond;
 pthread_mutex_t c_mutex;
 pthread_mutex_t seek_mutex;
@@ -24,9 +21,6 @@ Clock audio_clk = {0};
 
 FPacket *copy_pkg = NULL;
 
-AVStream *video_stream = NULL;
-AVStream *audio_stream = NULL;
-
 bool audio_seeking = false;
 bool video_seeking = false;
 bool want_seek = false;
@@ -35,9 +29,6 @@ bool want_audio_seek_inner = false;
 bool want_video_seek_inner = false;
 
 double seek_time = 0;
-
-AVCodecContext *video_dec_ctx = NULL;
-AVCodecContext *audio_dec_ctx = NULL;
 
 bool crash_error = false;
 
@@ -137,7 +128,7 @@ void set_audio_clock(double pts) {
     audio_clk.last_updated = time;
 }
 
-void decode_packet(AVPacket *pkt) {
+void decode_packet(AVPacket *pkt, int audio_stream_id, int video_stream_id) {
 //    LOGE("seek_frame111");
     if (pkt->stream_index == video_stream_id || pkt->stream_index == audio_stream_id) {
         AVPacket *pkg = av_packet_clone(pkt);
@@ -256,10 +247,6 @@ void ff_init() {
 }
 
 void ff_release() {
-    video_stream = NULL;
-    video_stream = NULL;
-    video_stream_id = -1;
-    audio_stream_id = -1;
     if (copy_pkg) {
         av_packet_free(&copy_pkg->avPacket);
         free_packet(copy_pkg);

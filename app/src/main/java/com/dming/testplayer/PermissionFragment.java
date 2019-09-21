@@ -11,7 +11,7 @@ import android.widget.Toast;
 
 public class PermissionFragment extends Fragment {
     public OnRequestPermissions mOnRequestPermissions;
-    private final int REQUEST_BLUETOOTH = 123;
+    private final int REQUEST_STORAGE = 123;
     private final static String TAG = "PermissionFragment";
 
     public void setPermissionListener(OnRequestPermissions onRequestPermissions) {
@@ -52,13 +52,12 @@ public class PermissionFragment extends Fragment {
 
     @TargetApi(Build.VERSION_CODES.M)
     public void requestBTPermission() {
-        requestPermissions(new String[]{Manifest.permission.BLUETOOTH,
-                Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_BLUETOOTH);
+        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_STORAGE);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == REQUEST_BLUETOOTH) {
+        if (requestCode == REQUEST_STORAGE) {
             boolean granted = false;
             for (int i = 0, size = permissions.length; i < size; i++) {
                 granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;

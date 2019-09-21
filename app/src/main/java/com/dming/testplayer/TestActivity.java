@@ -124,7 +124,7 @@ public class TestActivity extends AppCompatActivity {
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
                 Log.i("DMFF", "surfaceChanged");
                 mSurface = holder.getSurface();
-                FPlayer.update_surface(mSurface);
+                FPlayer.update_surface(mSurface, width, height);
             }
 
             @Override

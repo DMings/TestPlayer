@@ -89,14 +89,14 @@ int start_player(const char *src_filename, ANativeWindow *window,
     //
     ff_init();
     // ->>
-    ff_sec_duration = (int32_t)fmt_ctx->duration / AV_TIME_BASE; //ms
+    ff_sec_duration = (int32_t) fmt_ctx->duration / AV_TIME_BASE; //ms
     if (ff_sec_duration <= 0) {
         ff_sec_duration = 1; //ms
     }
-    int video_ret = video->open_stream(window);
-//    int video_ret = 1;
     int audio_ret = audio->open_stream();
 //    int audio_ret = 1;
+    int video_ret = video->open_stream(window, audio_ret >= 0);
+//    int video_ret = 1;
     if (video_ret >= 0 || audio_ret >= 0) {
         pthread_mutex_lock(&play_mutex);
         play_status = PLAYING;
@@ -113,7 +113,7 @@ int start_player(const char *src_filename, ANativeWindow *window,
             }
             seek_frame_if_need();
             ret = av_read_frame(fmt_ctx, pkt);
-            decode_packet(pkt);
+            decode_packet(pkt, audio->stream_id, video->stream_id);
         } while (ret >= 0);
         LOGI("Demuxing succeeded.");
     } else {
@@ -143,18 +143,20 @@ int start_player(const char *src_filename, ANativeWindow *window,
 }
 
 void seek(float percent) {
-    if (video_stream_id != -1 || audio_stream_id != -1) {
+    pthread_mutex_lock(&play_mutex);
+    if (play_status == PLAYING) {
         seek_frame(percent);
     }
+    pthread_mutex_unlock(&play_mutex);
 }
 
 void pause() {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
-        if (video && video_stream_id != -1) {
+        if (video && video->stream_id != -1) {
             video->pause();
         }
-        if (audio && audio_stream_id != -1) {
+        if (audio && audio->stream_id != -1) {
             audio->pause();
         }
     }
@@ -164,20 +166,22 @@ void pause() {
 void resume() {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
-        if (video && video_stream_id != -1) {
+        if (video && video->stream_id != -1) {
             video->resume();
         }
-        if (audio && audio_stream_id != -1) {
+        if (audio && audio->stream_id != -1) {
             audio->resume();
         }
     }
     pthread_mutex_unlock(&play_mutex);
 }
 
-void update_surface(ANativeWindow *window) {
+void update_surface(ANativeWindow *window, int width, int height) {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
-        if (video && video_stream_id != -1) {
+        if (video && video->stream_id != -1) {
+            video->view_width = width;
+            video->view_height = height;
             video->update_surface(window);
         }
     }
@@ -189,11 +193,11 @@ void release() {
     pthread_mutex_lock(&play_mutex);
     LOGE("play_status: %d", play_status);
     if (play_status != IDLE && play_status != STOPPING) {
-        if (!crash_error && (video_stream_id != -1 || audio_stream_id != -1)) {
-            if (video && video_stream_id != -1) {
+        if (!crash_error && (audio->stream_id != -1 || video->stream_id != -1)) {
+            if (video && video->stream_id != -1) {
                 video->resume();
             }
-            if (audio && audio_stream_id != -1) {
+            if (audio && audio->stream_id != -1) {
                 audio->resume();
             }
             pthread_mutex_lock(&c_mutex);
@@ -236,9 +240,9 @@ void resume_jni(JNIEnv *env, jclass type) {
     resume();
 }
 
-void update_surface_jni(JNIEnv *env, jclass type, jobject surface) {
+void update_surface_jni(JNIEnv *env, jclass type, jobject surface, jint width, jint height) {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    update_surface(window);
+    update_surface(window, width, height);
 }
 
 void release_jni(JNIEnv *env, jclass type) {
@@ -277,7 +281,7 @@ JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/v
                             {"seek",              "(F)V",                                                                                 (void *) seek_jni},
                             {"pause",             "()V",                                                                                  (void *) pause_jni},
                             {"resume",            "()V",                                                                                  (void *) resume_jni},
-                            {"update_surface",    "(Landroid/view/Surface;)V",                                                            (void *) update_surface_jni},
+                            {"update_surface",    "(Landroid/view/Surface;II)V",                                                          (void *) update_surface_jni},
                             {"release",           "()V",                                                                                  (void *) release_jni},
                             {"get_current_time",  "()J",                                                                                  (void *) get_current_time_jni},
                             {"get_duration_time", "()J",                                                                                  (void *) get_duration_time_jni},

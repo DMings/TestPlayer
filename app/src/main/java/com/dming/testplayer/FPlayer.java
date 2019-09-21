@@ -18,13 +18,14 @@ public class FPlayer implements SurfaceHolder.Callback {
         public static int PLAYING = 2;
         public static int STOPPING = 3;
     }
+
     private OnProgressListener mOnProgressListener;
     private Surface mSurface;
     private String mSrcPath;
     private boolean isDelayToPlay = false;
     private HandlerThread mPlayThread;
     private Handler mPlayHandler;
-//    private Lock mLock = new ReentrantLock();
+    //    private Lock mLock = new ReentrantLock();
     private Runnable mPrepareRunnable;
     private AtomicBoolean mPlayFinish = new AtomicBoolean(true);
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
@@ -93,7 +94,7 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     public int getPlayState() {
         int s = get_play_state();
-        Log.i("DMFF","getPlayState:     "+s);
+        Log.i("DMFF", "getPlayState:     " + s);
         return s;
     }
 
@@ -136,11 +137,12 @@ public class FPlayer implements SurfaceHolder.Callback {
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         mSurface = holder.getSurface();
+        Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
         if (isDelayToPlay) {
             isDelayToPlay = false;
             startPlay();
         } else {
-            FPlayer.update_surface(mSurface);
+            FPlayer.update_surface(mSurface, width, height);
         }
     }
 
@@ -167,7 +169,7 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     public static native int get_play_state();
 
-    public static native void update_surface(Surface surface);
+    public static native void update_surface(Surface surface, int width, int height);
 
     public static native void release();
 

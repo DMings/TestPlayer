@@ -12,9 +12,9 @@
 class Video : AV {
 public:
 
-    Video(UpdateTimeFun* updateTimeFun);
+    Video(UpdateTimeFun *fun);
 
-    int open_stream(ANativeWindow *window);
+    int open_stream(ANativeWindow *window, bool hasAudio);
 
     void pause();
 
@@ -24,7 +24,13 @@ public:
 
     void update_surface(ANativeWindow *window);
 
+    int stream_id = -1;
+
+    int view_width = 0;
+    int view_height = 0;
 private:
+    AVCodecContext *av_dec_ctx = NULL;
+    AVStream *av_stream = NULL;
     SwsContext *sws_context = NULL;
     ANativeWindow *mWindow = NULL;
     OpenGL openGL;
@@ -37,6 +43,7 @@ private:
     pthread_mutex_t pause_mutex;
     bool will_update_surface = false;
     UpdateTimeFun* updateTimeFun = NULL;
+    bool has_audio = false;
     //test
     double test_video_time = 0;
 

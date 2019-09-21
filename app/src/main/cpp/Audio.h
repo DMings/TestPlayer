@@ -29,6 +29,10 @@ public:
     static int must_feed;
     static pthread_mutex_t a_mutex;
     static pthread_cond_t a_cond;
+
+    int stream_id = -1;
+    AVStream *av_stream = NULL;
+    AVCodecContext *av_dec_ctx = NULL;
 private:
     static void *audioProcess(void *arg);
 

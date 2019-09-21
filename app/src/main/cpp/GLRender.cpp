@@ -48,12 +48,13 @@ static float model_matrix[] = {
         0, 0, 0, 1,
 };
 
-void GLRender::init(float ratioY) {
+void GLRender::init(float ratioX,float ratioY) {
     mProgram = GLUtils::createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     mPosition = (GLuint) glGetAttribLocation(mProgram, "inputPosition");
     mTextureCoordinate = (GLuint) glGetAttribLocation(mProgram, "inputTextureCoordinate");
     mImageTexture = (GLuint) glGetUniformLocation(mProgram, "inputImageTexture");
     mMatrix = (GLuint) glGetUniformLocation(mProgram, "inputMatrix");
+    model_matrix[0] = ratioX;
     model_matrix[5] = ratioY;
 }
 

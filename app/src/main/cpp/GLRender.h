@@ -14,7 +14,7 @@
 class GLRender {
 public:
     void onDraw(GLuint texture);
-    void init(float ratioY);
+    void init(float ratioX,float ratioY);
     void release();
 
 private:

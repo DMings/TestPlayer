@@ -15,15 +15,24 @@
 class OpenGL {
 public:
     OpenGL();
+
     ~OpenGL();
-    int createEgl(ANativeWindow * surface,EGLContext eglContext,int width,int height);
-    int updateEgl(ANativeWindow * surface);
+
+    int createEgl(ANativeWindow *surface, EGLContext eglContext,
+                  int view_width, int view_height,
+                  int tex_width, int tex_height);
+
+    int updateEgl(ANativeWindow *surface, int view_width, int view_height);
+
     void draw(void *pixels);
+
     void drawBackground();
+
     void release(bool reset_view);
+
 private:
     GLRender glRender;
-    ANativeWindow * mWindow;
+    ANativeWindow *mWindow;
     EGLDisplay mEglDisplay;
     EGLContext mEglContext;
     EGLSurface mEglSurface;
@@ -31,7 +40,9 @@ private:
     int mTexWidth;
     int mTexHeight;
     bool isCreateEgl = false;
+
     void createTexture();
+
     void deleteTexture();
 };
 

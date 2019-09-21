@@ -74,32 +74,21 @@ extern void seek_frame(float percent);
 
 extern AVFormatContext *fmt_ctx;
 
-extern int video_stream_id;
-extern int audio_stream_id;
-
-extern AVStream *video_stream;
-extern AVStream *audio_stream;
-
 extern pthread_cond_t c_cond;
 extern pthread_cond_t video_cond;
 extern pthread_mutex_t c_mutex;
 extern pthread_mutex_t seek_mutex;
-// ???
 extern pthread_cond_t audio_cond;
-// ???
 
 extern std::list<FPacket *> audio_pkt_list;
 extern std::list<FPacket *> video_pkt_list;
 
-extern void decode_packet(AVPacket *pkt);
+extern void decode_packet(AVPacket *pkt, int audio_stream_id, int video_stream_id);
 
 extern bool audio_seeking;
 extern bool video_seeking;
 
 extern void seek_frame_if_need();
-
-extern AVCodecContext *video_dec_ctx;
-extern AVCodecContext *audio_dec_ctx;
 
 extern bool crash_error;
 

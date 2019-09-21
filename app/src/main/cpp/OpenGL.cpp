@@ -12,13 +12,15 @@ OpenGL::~OpenGL() {
 
 }
 
-int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext, int width, int height) {
+int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext,
+                      int view_width, int view_height,
+                      int tex_width, int tex_height) {
     if (!surface) {
         return -1;
     }
-    mTexWidth = width;
-    mTexHeight = height;
-    LOGI("income width %d, surface height %d", width, height);
+    mTexWidth = tex_width;
+    mTexHeight = tex_height;
+    LOGI("OpenGL income width %d, surface height %d", view_width, view_height);
     mWindow = surface;
     ANativeWindow_acquire(mWindow);
     GLint majorVersion;
@@ -49,12 +51,12 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext, int width, 
     if (EGL_NO_SURFACE == mEglSurface) {
         return -1;
     }
-    if (!eglQuerySurface(mEglDisplay, mEglSurface, EGL_WIDTH, &width) ||
-        !eglQuerySurface(mEglDisplay, mEglSurface, EGL_HEIGHT, &height)) {
-        return -1;
+    if (view_width == 0 && view_height == 0) {
+        if (!eglQuerySurface(mEglDisplay, mEglSurface, EGL_WIDTH, &view_width) ||
+            !eglQuerySurface(mEglDisplay, mEglSurface, EGL_HEIGHT, &view_height)) {
+            return -1;
+        }
     }
-
-    ANativeWindow_setBuffersGeometry(mWindow, width, height, WINDOW_FORMAT_RGBA_8888);
 
     EGLint context_attr[] = {
             EGL_CONTEXT_CLIENT_VERSION, 2,
@@ -68,29 +70,50 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext, int width, 
     if (!eglMakeCurrent(mEglDisplay, mEglSurface, mEglSurface, mEglContext)) {
         return -1;
     }
-    glViewport(0, 0, width, height);
+    glViewport(0, 0, view_width, view_height);
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_CULL_FACE);
     createTexture();
-    float tr = mTexWidth * 1.0f / mTexHeight;
-    float ratioY = (width / tr) / height;
-    LOGI("OpenGL init success: surface width %d, surface height %d ratioY:%f", width, height, ratioY);
-    glRender.init(ratioY);
+    float ratioY = 1;
+    float ratioX = 1;
+    float rTex = 1.0F * mTexWidth / mTexHeight;
+    float rView = 1.0F * view_width / view_height;
+    if (view_width < view_height) {
+        if (rTex > rView) {
+            ratioY = (float) (1.0 * mTexHeight * view_width / mTexWidth / view_height);
+        } else {
+            ratioX = (float) (1 / (1.0 * mTexWidth * view_height / (mTexHeight * view_width)));
+        }
+    } else {
+        if (rTex > rView) {
+            ratioY = 1.0F / (1.0F * mTexHeight * view_width / mTexWidth / view_height);
+        } else {
+            ratioX = 1.0F * (1.0F * mTexWidth * view_height / (mTexHeight * view_width));
+        }
+    }
+//    if (mTexWidth > mTexHeight) {
+//        ratioY = (float) (1.0 * mTexHeight * width / mTexWidth / height);
+//    } else {
+//        ratioX = (float) (1 / (1.0 * mTexWidth * height / (mTexHeight * width)));
+//    }
+    LOGI("OpenGL init success: surface width %d, surface height %d texture width %d, texture height %d ratioX:%f  ratioY:%f",
+         view_width, view_height, mTexWidth, mTexHeight, ratioX, ratioY);
+    glRender.init(ratioX, ratioY);
     isCreateEgl = true;
     return mTexture;
 }
 
-int OpenGL::updateEgl(ANativeWindow *surface) {
+int OpenGL::updateEgl(ANativeWindow *surface, int view_width, int view_height) {
     if (isCreateEgl) {
         release(false);
-        return createEgl(surface, NULL, mTexWidth, mTexHeight);
+        return createEgl(surface, NULL, view_width, view_height, mTexWidth, mTexHeight);
     }
     return -1;
 }
 
 void OpenGL::release(bool reset_view) {
-    if(reset_view){
+    if (reset_view) {
         drawBackground();
     }
     isCreateEgl = false;

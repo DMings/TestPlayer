@@ -22,7 +22,7 @@ extern void pause();
 
 extern void resume();
 
-extern void update_surface(ANativeWindow *window);
+extern void update_surface(ANativeWindow *window, int width, int height);
 
 extern void release();
 
