@@ -9,7 +9,7 @@ pthread_mutex_t Audio::a_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t Audio::a_cond = PTHREAD_COND_INITIALIZER;
 
 Audio::Audio(UpdateTimeFun *fun) {
-    LOGI("Audio must_feed: %d ",must_feed)
+    LOGI("Audio must_feed: %d ", must_feed)
     must_feed = 0;
     updateTimeFun = fun;
 }
@@ -67,14 +67,14 @@ uint8_t **Audio::getDstData() {
 void Audio::slBufferCallback() {
 //    LOGI("slBufferCallback start")
     pthread_mutex_lock(&a_mutex);
-    if(must_feed != -1){
+    if (must_feed != -1) {
         must_feed = 1;
         pthread_cond_signal(&a_cond); //通知
         pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
     }
     pthread_mutex_unlock(&a_mutex);
     //在这里之后必须要有数据
-    LOGI("slBufferCallback end")
+//    LOGI("slBufferCallback end")
 }
 
 
@@ -261,6 +261,10 @@ int Audio::open_stream() {
     LOGI("stream_id: %d", stream_id);
     if (ret >= 0) {
         av_stream = fmt_ctx->streams[stream_id];
+    }else {
+        stream_id = -1;
+    }
+    if (av_stream) {
         int out_sample_rate = av_dec_ctx->sample_rate;
         LOGI("ffplay -ac %d -ar %d byte %d fmt_name:%s", av_dec_ctx->channels, av_dec_ctx->sample_rate,
              av_get_bytes_per_sample(av_dec_ctx->sample_fmt), av_get_sample_fmt_name(av_dec_ctx->sample_fmt));
@@ -273,9 +277,9 @@ int Audio::open_stream() {
                                      out_sample_rate,
                                      AV_SAMPLE_FMT_S16, 1);
         av_samples_alloc(&dst_data_2, NULL,
-                                     av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
-                                     out_sample_rate,
-                                     AV_SAMPLE_FMT_S16, 1);
+                         av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
+                         out_sample_rate,
+                         AV_SAMPLE_FMT_S16, 1);
         LOGI("out_sample_rate: %d s: %d nb_channels:%d", out_sample_rate, len_1,
              av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO));
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
@@ -296,7 +300,7 @@ int Audio::open_stream() {
             stream_id = -1;
             LOGE("swr_init failed");
         }
-    }else {
+    } else {
         stream_id = -1;
     }
     return ret;
@@ -324,7 +328,7 @@ void Audio::release() {
     pthread_cond_broadcast(&audio_cond);
     pthread_cond_signal(&c_cond);
     pthread_mutex_unlock(&c_mutex);
-    if(p_audio_tid){
+    if (p_audio_tid) {
         pthread_join(p_audio_tid, 0);
     }
     LOGI("audio openSL.unlock");

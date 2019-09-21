@@ -62,6 +62,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public void seekTime(float percent) {
+        resume();
         seek(percent);
     }
 

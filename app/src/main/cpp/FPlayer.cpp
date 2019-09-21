@@ -89,7 +89,8 @@ int start_player(const char *src_filename, ANativeWindow *window,
     //
     ff_init();
     // ->>
-    ff_sec_duration = (int32_t) fmt_ctx->duration / AV_TIME_BASE; //ms
+    LOGI("fmt_ctx->duration %lld",fmt_ctx->duration)
+    ff_sec_duration = (int32_t) ((fmt_ctx->duration + AV_TIME_BASE / 2) / AV_TIME_BASE); //ms
     if (ff_sec_duration <= 0) {
         ff_sec_duration = 1; //ms
     }

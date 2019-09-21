@@ -28,7 +28,7 @@
 
 static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 //    LOGE("***slBufferCallback *** %X <====> %d", pthread_self(), gettid());
-    LOGI("OpenSL slBufferCallback>>>>>");
+//    LOGI("OpenSL slBufferCallback>>>>>");
     SLuint32 pState;
     OpenSL *openSL = (OpenSL *) context;
     (*openSL->bqPlayerPlay)->GetPlayState(openSL->bqPlayerPlay, &pState);

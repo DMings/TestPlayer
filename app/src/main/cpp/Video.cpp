@@ -178,8 +178,8 @@ void *Video::videoProcess(void *arg) {
                 ff_last_sec_time = ff_sec_time;
             }
             int delay = video->synchronize_video(pkt_duration); // ms
-            LOGI("video delay->%d pts: %f get_master_clock: %f video_time: %f", delay, pts, get_master_clock(),
-                 (get_master_clock() - video->test_video_time));
+//            LOGI("video delay->%d pts: %f get_master_clock: %f video_time: %f", delay, pts, get_master_clock(),
+//                 (get_master_clock() - video->test_video_time));
             if (delay >= 0) {
                 av_usleep((uint) delay * 1000); // us
 //                LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),

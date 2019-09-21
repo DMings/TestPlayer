@@ -6,6 +6,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.*;
 
@@ -18,7 +19,6 @@ import java.util.ArrayList;
  */
 public class MainActivity extends AppCompatActivity {
 
-    private final static int UPDATE_UI = 1;
     private SurfaceView mPlaySv;
     private TextView mTvSrc;
     private ImageView mPlayBtn;
@@ -29,7 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private long mCurTime;
     private LinearLayout mControlLL;
     private FrameLayout mTitleLayout;
-    private StaticHandler mHandler;
+    private Handler mHandler;
     private boolean mIsSearch = false;
     private ListView mDataLv;
     private ArrayList<String> mFileList = new ArrayList<>();
@@ -41,16 +41,13 @@ public class MainActivity extends AppCompatActivity {
     private FPlayer mFPlayer;
     private boolean mIsSeeking = false;
     private boolean mIsPlaying = false;
+    private boolean mIsShowPlayUI = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS); //透明状态栏
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION); //透明导航栏
-        }
         mDataLv = findViewById(R.id.lv_data);
         mFileLayout = findViewById(R.id.fl_file);
         mSearchPb = findViewById(R.id.pb_search);
@@ -62,13 +59,13 @@ public class MainActivity extends AppCompatActivity {
         mTotalTimeTv = findViewById(R.id.tv_total_time);
         mPlaySeekBar = findViewById(R.id.sb_play);
         mControlLL = findViewById(R.id.ll_control);
-        mHandler = new StaticHandler(this);
+        mHandler = new Handler(Looper.getMainLooper());
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.item_file_list, mFileList);
         mDataLv.setAdapter(adapter);
         mDataLv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                if(mFilePath != null && mFilePath.equals(mFileList.get(position))){
+                if (mFilePath != null && mFilePath.equals(mFileList.get(position))) {
                     return;
                 }
                 mFilePath = mFileList.get(position);
@@ -78,8 +75,8 @@ public class MainActivity extends AppCompatActivity {
         mPlayBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(mFilePath == null){
-                    FToast.show(MainActivity.this,"当前无视频文件可播放");
+                if (mFilePath == null) {
+                    FToast.show(MainActivity.this, "当前无视频文件可播放");
                     return;
                 }
                 playOrPause(false);
@@ -89,7 +86,7 @@ public class MainActivity extends AppCompatActivity {
         mFPlayer.setOnProgressListener(new OnProgressListener() {
             @Override
             public void onProgress(int curTime, final int totalTime) { // curTime == -1 视频结束
-                if(curTime == -1){
+                if (curTime == -1) {
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -104,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
                             mFileLayout.setVisibility(View.VISIBLE);
                         }
                     });
-                }else {
+                } else {
                     if (!mIsSeeking) {
                         mCurTime = curTime;
                         mTotalTime = totalTime;
@@ -156,23 +153,26 @@ public class MainActivity extends AppCompatActivity {
         baseLayout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mPlayBtn.setVisibility(View.VISIBLE);
-                mControlLL.setVisibility(View.VISIBLE);
-                mTvSrc.setVisibility(View.VISIBLE);
-                mTitleLayout.setVisibility(View.VISIBLE);
                 mFileLayout.setVisibility(mFileListShow ? View.VISIBLE : View.GONE);
                 if (!mFileListShow) {
-                    if (mHandler.hasMessages(UPDATE_UI)) {
-                        mHandler.removeMessages(UPDATE_UI);
-                        mHandler.sendEmptyMessage(UPDATE_UI);
+                    if (mIsShowPlayUI) {
+                        mIsShowPlayUI = false;
+                        mPlayBtn.setVisibility(View.GONE);
+                        mControlLL.setVisibility(View.GONE);
+                        mTvSrc.setVisibility(View.GONE);
+                        mTitleLayout.setVisibility(View.GONE);
                     } else {
-                        removeAndPost();
+                        mIsShowPlayUI = true;
+                        mPlayBtn.setVisibility(View.VISIBLE);
+                        mControlLL.setVisibility(View.VISIBLE);
+                        mTvSrc.setVisibility(View.VISIBLE);
+                        mTitleLayout.setVisibility(View.VISIBLE);
                     }
                 } else {
                     mFileListShow = false;
                     mFileLayout.setVisibility(View.GONE);
                     mPlayBtn.setVisibility(View.VISIBLE);
-                    removeAndPost();
+//                    removeAndPost();
                 }
             }
         });
@@ -180,7 +180,6 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.iv_file_list).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mHandler.removeMessages(UPDATE_UI);
                 mFileLayout.setVisibility(View.VISIBLE);
                 mPlayBtn.setVisibility(View.GONE);
                 mFileListShow = true;
@@ -261,12 +260,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void removeAndPost() {
-        removePost();
-        mHandler.sendEmptyMessageDelayed(UPDATE_UI, 3000);
+//        removePost();
+//        mHandler.sendEmptyMessageDelayed(UPDATE_UI, 3000);
     }
 
     private void removePost() {
-        mHandler.removeMessages(UPDATE_UI);
+//        mHandler.removeMessages(UPDATE_UI);
     }
 
 
@@ -284,29 +283,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private static class StaticHandler extends Handler {
-
-        private WeakReference<MainActivity> activityWeak;
-
-        StaticHandler(MainActivity activity) {
-            this.activityWeak = new WeakReference<>(activity);
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            if (msg.what == UPDATE_UI) {
-                if (activityWeak != null) {
-                    activityWeak.get().mPlayBtn.setVisibility(View.GONE);
-                    activityWeak.get().mControlLL.setVisibility(View.GONE);
-                    activityWeak.get().mTvSrc.setVisibility(View.GONE);
-                    activityWeak.get().mTitleLayout.setVisibility(View.GONE);
-                    activityWeak.get().mFileLayout.setVisibility(View.GONE);
-                }
-            }
-        }
-    }
-
     @Override
     protected void onPause() {
         mFPlayer.onPause();
@@ -323,7 +299,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         mFPlayer.onDestroy();
-        mHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 

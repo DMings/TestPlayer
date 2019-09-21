@@ -107,7 +107,8 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext,
 int OpenGL::updateEgl(ANativeWindow *surface, int view_width, int view_height) {
     if (isCreateEgl) {
         release(false);
-        return createEgl(surface, NULL, view_width, view_height, mTexWidth, mTexHeight);
+        int ret = createEgl(surface, NULL, view_width, view_height, mTexWidth, mTexHeight);
+        return ret;
     }
     return -1;
 }
@@ -172,6 +173,7 @@ void OpenGL::draw(void *pixels) {
 }
 
 void OpenGL::drawBackground() {
+    LOGI("drawBackground");
     glClear(GL_COLOR_BUFFER_BIT);
     eglSwapBuffers(mEglDisplay, mEglSurface);
     GLUtils::checkErr("draw");
