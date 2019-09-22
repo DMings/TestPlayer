@@ -18,25 +18,30 @@ public:
 
     ~OpenGL();
 
-    int createEgl(ANativeWindow *surface, EGLContext eglContext,
-                  int view_width, int view_height,
-                  int tex_width, int tex_height);
+    int createEgl(ANativeWindow *surface, EGLContext eglContext);
 
-    int updateEgl(ANativeWindow *surface, int view_width, int view_height);
+    void surfaceChange(int view_width, int view_height,
+                       int tex_width, int tex_height);
+
+    int updateEgl(ANativeWindow *surface);
 
     void draw(void *pixels);
+
+    void draw(int texture);
 
     void drawBackground();
 
     void release(bool reset_view);
 
+    EGLContext mEglContext = EGL_NO_CONTEXT;
+
+    GLuint mTexture = 0;
+
+    EGLSurface mEglSurface;
 private:
     GLRender glRender;
     ANativeWindow *mWindow;
     EGLDisplay mEglDisplay;
-    EGLContext mEglContext;
-    EGLSurface mEglSurface;
-    GLuint mTexture = 0;
     int mTexWidth;
     int mTexHeight;
     bool isCreateEgl = false;

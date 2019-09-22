@@ -14,7 +14,11 @@
 class GLRender {
 public:
     void onDraw(GLuint texture);
-    void init(float ratioX,float ratioY);
+
+    void init();
+
+    void onSizeChange(float ratioX, float ratioY);
+
     void release();
 
 private:

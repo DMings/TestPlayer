@@ -1,17 +1,16 @@
 package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
-import android.os.*;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.*;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 
 /**
@@ -109,6 +108,13 @@ public class MainActivity extends AppCompatActivity {
                         mHandler.post(textRunnable);
                     }
                 }
+            }
+        }, new FPlayer.OnSurfaceChange() {
+            @Override
+            public void change() {
+                mIsPlaying = true;
+                mFPlayer.onResume();
+                mPlayBtn.setImageResource(R.drawable.ic_button_pause);
             }
         });
         mPlaySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {

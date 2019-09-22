@@ -342,6 +342,7 @@ void Audio::release() {
     openSL.release();
     LOGI("audio pthread_join done");
     if (swr_context != NULL) {
+        swr_close(swr_context);
         swr_free(&swr_context);
         swr_context = NULL;
     }
@@ -354,6 +355,7 @@ void Audio::release() {
         dst_data_2 = NULL;
     }
     if (av_dec_ctx) {
+        avcodec_close(av_dec_ctx);
         avcodec_free_context(&av_dec_ctx);
         av_dec_ctx = NULL;
     }

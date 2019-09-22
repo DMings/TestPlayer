@@ -12,25 +12,21 @@ OpenGL::~OpenGL() {
 
 }
 
-int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext,
-                      int view_width, int view_height,
-                      int tex_width, int tex_height) {
+int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext) {
+    LOGI("...createEgl: %p", eglContext);
     if (!surface) {
         return -1;
     }
-    mTexWidth = tex_width;
-    mTexHeight = tex_height;
-    LOGI("OpenGL income width %d, surface height %d", view_width, view_height);
     mWindow = surface;
-    ANativeWindow_acquire(mWindow);
+//    ANativeWindow_acquire(mWindow);
     GLint majorVersion;
     GLint minorVersion;
     mEglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (EGL_NO_DISPLAY == mEglDisplay) {
-        return -1;
+        return -2;
     }
     if (!eglInitialize(mEglDisplay, &majorVersion, &minorVersion)) {
-        return -1;
+        return -3;
     }
     EGLint config_attr[] = {
             EGL_BLUE_SIZE, 8,
@@ -45,36 +41,54 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext,
     int num_configs = 0;
     EGLConfig eglConfig;
     if (!eglChooseConfig(mEglDisplay, config_attr, &eglConfig, 1, &num_configs)) {
-        return -1;
+        return -4;
     }
-    mEglSurface = eglCreateWindowSurface(mEglDisplay, eglConfig, mWindow, NULL);
-    if (EGL_NO_SURFACE == mEglSurface) {
-        return -1;
-    }
-    if (view_width == 0 && view_height == 0) {
-        if (!eglQuerySurface(mEglDisplay, mEglSurface, EGL_WIDTH, &view_width) ||
-            !eglQuerySurface(mEglDisplay, mEglSurface, EGL_HEIGHT, &view_height)) {
-            return -1;
-        }
-    }
+
+//    if (view_width == 0 && view_height == 0) {
+//        if (!eglQuerySurface(mEglDisplay, mEglSurface, EGL_WIDTH, &view_width) ||
+//            !eglQuerySurface(mEglDisplay, mEglSurface, EGL_HEIGHT, &view_height)) {
+//            return -1;
+//        }
+//    }
 
     EGLint context_attr[] = {
             EGL_CONTEXT_CLIENT_VERSION, 2,
             EGL_NONE
     };
     mEglContext = eglCreateContext(mEglDisplay, eglConfig,
-                                   eglContext != NULL ? eglContext : EGL_NO_CONTEXT, context_attr);
+                                   eglContext != NULL || eglConfig != EGL_NO_CONTEXT ? eglContext : EGL_NO_CONTEXT,
+                                   context_attr);
     if (EGL_NO_CONTEXT == mEglContext) {
-        return -1;
+        return -6;
     }
+
+//    if(eglSurface == NULL){
+        mEglSurface = eglCreateWindowSurface(mEglDisplay, eglConfig, mWindow, NULL);
+        if (EGL_NO_SURFACE == mEglSurface) {
+            return -5;
+        }
+//    }else {
+//        LOGI("eglSurface != NULL");
+//    }
+
     if (!eglMakeCurrent(mEglDisplay, mEglSurface, mEglSurface, mEglContext)) {
-        return -1;
+        return -7;
     }
-    glViewport(0, 0, view_width, view_height);
     glClearColor(0.0, 0.0, 0.0, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
+//    glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_CULL_FACE);
     createTexture();
+    glRender.init();
+    isCreateEgl = true;
+    return mTexture;
+}
+
+void OpenGL::surfaceChange(int view_width, int view_height,
+                           int tex_width, int tex_height) {
+    glViewport(0, 0, view_width, view_height);
+    mTexWidth = tex_width;
+    mTexHeight = tex_height;
+    LOGI("OpenGL income width %d, surface height %d", view_width, view_height);
     float ratioY = 1;
     float ratioX = 1;
     float rTex = 1.0F * mTexWidth / mTexHeight;
@@ -92,22 +106,15 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext,
             ratioX = 1.0F * (1.0F * mTexWidth * view_height / (mTexHeight * view_width));
         }
     }
-//    if (mTexWidth > mTexHeight) {
-//        ratioY = (float) (1.0 * mTexHeight * width / mTexWidth / height);
-//    } else {
-//        ratioX = (float) (1 / (1.0 * mTexWidth * height / (mTexHeight * width)));
-//    }
+    glRender.onSizeChange(ratioX, ratioY);
     LOGI("OpenGL init success: surface width %d, surface height %d texture width %d, texture height %d ratioX:%f  ratioY:%f",
          view_width, view_height, mTexWidth, mTexHeight, ratioX, ratioY);
-    glRender.init(ratioX, ratioY);
-    isCreateEgl = true;
-    return mTexture;
 }
 
-int OpenGL::updateEgl(ANativeWindow *surface, int view_width, int view_height) {
+int OpenGL::updateEgl(ANativeWindow *surface) {
     if (isCreateEgl) {
         release(false);
-        int ret = createEgl(surface, NULL, view_width, view_height, mTexWidth, mTexHeight);
+        int ret = createEgl(surface, NULL);
         return ret;
     }
     return -1;
@@ -131,9 +138,9 @@ void OpenGL::release(bool reset_view) {
             eglTerminate(mEglDisplay);
         }
     }
-    if (mWindow != NULL) {
-        ANativeWindow_release(mWindow);
-    }
+//    if (mWindow != NULL) {
+//        ANativeWindow_release(mWindow);
+//    }
     mEglDisplay = EGL_NO_DISPLAY;
     mEglContext = EGL_NO_CONTEXT;
     mEglSurface = EGL_NO_SURFACE;
@@ -168,6 +175,14 @@ void OpenGL::draw(void *pixels) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mTexWidth, mTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
     glRender.onDraw(mTexture);
+    eglSwapBuffers(mEglDisplay, mEglSurface);
+    GLUtils::checkErr("draw");
+}
+
+void OpenGL::draw(int texture) {
+    glClear(GL_COLOR_BUFFER_BIT);
+    glActiveTexture(GL_TEXTURE0);
+    glRender.onDraw(texture);
     eglSwapBuffers(mEglDisplay, mEglSurface);
     GLUtils::checkErr("draw");
 }

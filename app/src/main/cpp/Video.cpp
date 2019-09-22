@@ -9,6 +9,9 @@ Video::Video(UpdateTimeFun *fun) {
     updateTimeFun = fun;
 }
 
+Video::~Video() {
+}
+
 uint Video::synchronize_video(double pkt_duration) { // us
     uint wanted_delay = 0;
     double diff_ms;
@@ -69,9 +72,9 @@ void *Video::videoProcess(void *arg) {
     bool checkout_time = false;
     Video *video = (Video *) arg;
     FPacket *video_packet = NULL;
-    video->openGL.createEgl(video->mWindow, NULL,
-                            video->view_width, video->view_height,
-                            video->av_dec_ctx->width, video->av_dec_ctx->height);
+    video->openGL.createEgl(video->mWindow, NULL);
+    video->openGL.surfaceChange(video->view_width, video->view_height,
+                                video->av_dec_ctx->width, video->av_dec_ctx->height);
     if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
@@ -190,7 +193,9 @@ void *Video::videoProcess(void *arg) {
             pthread_mutex_lock(&c_mutex);
             if (video->will_update_surface) {
                 video->will_update_surface = false;
-                video->openGL.updateEgl(video->mWindow, video->view_width, video->view_height);
+                video->openGL.updateEgl(video->mWindow);
+                video->openGL.surfaceChange(video->view_width, video->view_height,
+                                            video->av_dec_ctx->width, video->av_dec_ctx->height);
             }
             pthread_mutex_unlock(&c_mutex);
 
@@ -303,6 +308,7 @@ void Video::release() {
     pthread_cond_destroy(&video_cond);
     pthread_mutex_destroy(&pause_mutex);
     if (av_dec_ctx) {
+        avcodec_close(av_dec_ctx);
         avcodec_free_context(&av_dec_ctx);
     }
     updateTimeFun = NULL;

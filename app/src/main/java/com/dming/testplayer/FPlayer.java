@@ -29,16 +29,22 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Runnable mPrepareRunnable;
     private AtomicBoolean mPlayFinish = new AtomicBoolean(true);
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
+    private int mSurfaceWidth;
+    private int mSurfaceHeight;
+    private OnSurfaceChange mOnSurfaceChange;
+//    private EglHelper mEglHelper;
 
     public FPlayer(SurfaceView surfaceView) {
         surfaceView.getHolder().addCallback(this);
+//        mEglHelper = new EglHelper();
         mPlayThread = new HandlerThread("FPlayer");
         mPlayThread.start();
         mPlayHandler = new Handler(mPlayThread.getLooper());
     }
 
-    public void setOnProgressListener(OnProgressListener onProgressListener) {
+    public void setOnProgressListener(OnProgressListener onProgressListener, OnSurfaceChange onSurfaceChange) {
         mOnProgressListener = onProgressListener;
+        mOnSurfaceChange = onSurfaceChange;
     }
 
     public boolean play(final String srcPath, Runnable prepareRunnable) {
@@ -119,7 +125,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Runnable playRunnable = new Runnable() {
         @Override
         public void run() {
-            FPlayer.play(mSrcPath, mSurface, new OnProgressListener() {
+            FPlayer.play(mSrcPath, mSurface, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
                 @Override
                 public void onProgress(int curTime, int totalTime) {
                     if (mOnProgressListener != null) {
@@ -132,11 +138,17 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        mSurface = holder.getSurface();
+//        mEglHelper.initEgl(null, holder.getSurface());
+//        mEglHelper.glBindThread();
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+//        GLES20.glClearColor(1, 0, 0, 1);
+//        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+//        mEglHelper.swapBuffers();
+        mSurfaceWidth = width;
+        mSurfaceHeight = height;
         mSurface = holder.getSurface();
         Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
         if (isDelayToPlay) {
@@ -144,19 +156,24 @@ public class FPlayer implements SurfaceHolder.Callback {
             startPlay();
         } else {
             FPlayer.update_surface(mSurface, width, height);
+            mOnSurfaceChange.change();
         }
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+//        mEglHelper.destroyEgl();
+    }
 
+    public interface OnSurfaceChange {
+        void change();
     }
 
     static {
         System.loadLibrary("fplayer");
     }
 
-    public static native void play(String path, Surface surface, OnProgressListener onProgressListener);
+    public static native void play(String path, Surface surface, int width, int height, OnProgressListener onProgressListener);
 
     public static native void seek(float percent);
 

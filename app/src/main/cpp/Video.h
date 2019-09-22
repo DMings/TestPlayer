@@ -14,6 +14,8 @@ public:
 
     Video(UpdateTimeFun *fun);
 
+    ~Video();
+
     int open_stream(ANativeWindow *window, bool hasAudio);
 
     void pause();

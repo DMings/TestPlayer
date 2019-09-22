@@ -17,7 +17,6 @@ JNIEnv *native_env = NULL;
 jobject progress_obj = NULL;
 jmethodID on_progress = NULL;
 
-
 void jvm_attach_fun() {
     native_env = NULL;
     native_jvm->AttachCurrentThread(&native_env, NULL);
@@ -50,6 +49,7 @@ void refresh_finish(JNIEnv *env, jobject p_obj, jmethodID progress) {
 }
 
 int start_player(const char *src_filename, ANativeWindow *window,
+                 int width, int height,
                  JNIEnv *env, jobject progressObj, jmethodID onProgress) {
     int ret = 0;
     bool cr;
@@ -69,6 +69,9 @@ int start_player(const char *src_filename, ANativeWindow *window,
     video = new Video(&updateTimeFun);
     audio = new Audio(&updateTimeFun);
     AVPacket *pkt = av_packet_alloc();
+    //
+    video->view_width = width;
+    video->view_height = height;
     LOGI("avformat_open_input %s", src_filename);
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
         LOGE("Could not open source file %s", src_filename);
@@ -89,7 +92,7 @@ int start_player(const char *src_filename, ANativeWindow *window,
     //
     ff_init();
     // ->>
-    LOGI("fmt_ctx->duration %lld",fmt_ctx->duration)
+    LOGI("fmt_ctx->duration %lld", fmt_ctx->duration)
     ff_sec_duration = (int32_t) ((fmt_ctx->duration + AV_TIME_BASE / 2) / AV_TIME_BASE); //ms
     if (ff_sec_duration <= 0) {
         ff_sec_duration = 1; //ms
@@ -219,12 +222,13 @@ int64_t get_duration_time() {
 
 ////// jni ///////////////////////////////////////////////////////////
 
-void play_jni(JNIEnv *env, jclass type, jstring path_, jobject surface, jobject onProgressListener) {
+void play_jni(JNIEnv *env, jclass type, jstring path_, jobject surface, jint width, jint height,
+              jobject onProgressListener) {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     const char *path = env->GetStringUTFChars(path_, NULL);
     jclass plClass = env->GetObjectClass(onProgressListener);
     jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(II)V");
-    start_player(path, window, env, onProgressListener, onProgress);
+    start_player(path, window, width, height, env, onProgressListener, onProgress);
     env->ReleaseStringUTFChars(path_, path);
 }
 
@@ -278,16 +282,16 @@ jint get_play_state_jni(JNIEnv *env, jclass type) {
 //Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,jobject onProgressListener)
 //"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
 
-JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V", (void *) play_jni},
-                            {"seek",              "(F)V",                                                                                 (void *) seek_jni},
-                            {"pause",             "()V",                                                                                  (void *) pause_jni},
-                            {"resume",            "()V",                                                                                  (void *) resume_jni},
-                            {"update_surface",    "(Landroid/view/Surface;II)V",                                                          (void *) update_surface_jni},
-                            {"release",           "()V",                                                                                  (void *) release_jni},
-                            {"get_current_time",  "()J",                                                                                  (void *) get_current_time_jni},
-                            {"get_duration_time", "()J",                                                                                  (void *) get_duration_time_jni},
-                            {"scan_file",         "(Ljava/lang/String;Lcom/dming/testplayer/FileAction;)V",                               (void *) scan_file_jni},
-                            {"get_play_state",    "()I",                                                                                  (void *) get_play_state_jni},
+JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;Landroid/view/Surface;IILcom/dming/testplayer/OnProgressListener;)V", (void *) play_jni},
+                            {"seek",              "(F)V",                                                                                   (void *) seek_jni},
+                            {"pause",             "()V",                                                                                    (void *) pause_jni},
+                            {"resume",            "()V",                                                                                    (void *) resume_jni},
+                            {"update_surface",    "(Landroid/view/Surface;II)V",                                                            (void *) update_surface_jni},
+                            {"release",           "()V",                                                                                    (void *) release_jni},
+                            {"get_current_time",  "()J",                                                                                    (void *) get_current_time_jni},
+                            {"get_duration_time", "()J",                                                                                    (void *) get_duration_time_jni},
+                            {"scan_file",         "(Ljava/lang/String;Lcom/dming/testplayer/FileAction;)V",                                 (void *) scan_file_jni},
+                            {"get_play_state",    "()I",                                                                                    (void *) get_play_state_jni},
 };
 
 jint registerNativeMethod(JNIEnv *env) {

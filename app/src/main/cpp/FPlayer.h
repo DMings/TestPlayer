@@ -10,7 +10,8 @@
 #include "SearchFile.h"
 
 extern int start_player(const char *src_filename, ANativeWindow *window,
-        JNIEnv *env,jobject onProgressListener,jmethodID onProgress);
+                        int width, int height,
+                        JNIEnv *env, jobject onProgressListener, jmethodID onProgress);
 
 extern void seek(float percent);
 
