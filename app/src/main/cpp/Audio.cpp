@@ -355,7 +355,7 @@ void Audio::release() {
         dst_data_2 = NULL;
     }
     if (av_dec_ctx) {
-        avcodec_close(av_dec_ctx);
+//        avcodec_close(av_dec_ctx);
         avcodec_free_context(&av_dec_ctx);
         av_dec_ctx = NULL;
     }

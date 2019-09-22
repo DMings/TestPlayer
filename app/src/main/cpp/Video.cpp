@@ -308,7 +308,7 @@ void Video::release() {
     pthread_cond_destroy(&video_cond);
     pthread_mutex_destroy(&pause_mutex);
     if (av_dec_ctx) {
-        avcodec_close(av_dec_ctx);
+//        avcodec_close(av_dec_ctx);
         avcodec_free_context(&av_dec_ctx);
     }
     updateTimeFun = NULL;
