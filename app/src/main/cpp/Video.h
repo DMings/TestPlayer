@@ -36,6 +36,7 @@ private:
     SwsContext *sws_context = NULL;
     ANativeWindow *mWindow = NULL;
     OpenGL openGL;
+//    OpenGL rotateGL;
     uint8_t *dst_data[4];
     int dst_line_size[4];
     pthread_t p_video_tid = 0;

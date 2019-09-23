@@ -282,6 +282,11 @@ void Video::update_surface(ANativeWindow *window) {
     mWindow = window;
     pthread_mutex_lock(&c_mutex);
     will_update_surface = true;
+//    int ret = rotateGL.createEgl(NULL, openGL.mEglContext);
+//    LOGI("update_surface ret: %d", ret);
+//    rotateGL.surfaceChange(view_width, view_height,
+//                           av_dec_ctx->width, av_dec_ctx->height);
+//    rotateGL.release(true);
     pthread_mutex_unlock(&c_mutex);
 }
 

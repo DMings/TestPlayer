@@ -62,14 +62,10 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext) {
         return -6;
     }
 
-//    if(eglSurface == NULL){
-        mEglSurface = eglCreateWindowSurface(mEglDisplay, eglConfig, mWindow, NULL);
-        if (EGL_NO_SURFACE == mEglSurface) {
-            return -5;
-        }
-//    }else {
-//        LOGI("eglSurface != NULL");
-//    }
+    mEglSurface = eglCreateWindowSurface(mEglDisplay, eglConfig, mWindow, NULL);
+    if (EGL_NO_SURFACE == mEglSurface) {
+        return -5;
+    }
 
     if (!eglMakeCurrent(mEglDisplay, mEglSurface, mEglSurface, mEglContext)) {
         return -7;
