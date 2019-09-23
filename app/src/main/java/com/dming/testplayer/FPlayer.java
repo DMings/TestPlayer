@@ -10,6 +10,8 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class FPlayer implements SurfaceHolder.Callback {
     public static class PlayStatus {
@@ -25,7 +27,9 @@ public class FPlayer implements SurfaceHolder.Callback {
     private boolean isDelayToPlay = false;
     private HandlerThread mPlayThread;
     private Handler mPlayHandler;
-    //    private Lock mLock = new ReentrantLock();
+    private HandlerThread mControlThread;
+    private Handler mControlHandler;
+    private Lock mLock = new ReentrantLock();
     private Runnable mPrepareRunnable;
     private AtomicBoolean mPlayFinish = new AtomicBoolean(true);
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
@@ -40,6 +44,9 @@ public class FPlayer implements SurfaceHolder.Callback {
         mPlayThread = new HandlerThread("FPlayer");
         mPlayThread.start();
         mPlayHandler = new Handler(mPlayThread.getLooper());
+        mControlThread = new HandlerThread("FControl");
+        mControlThread.start();
+        mControlHandler = new Handler(mControlThread.getLooper());
     }
 
     public void setOnProgressListener(OnProgressListener onProgressListener, OnSurfaceChange onSurfaceChange) {
@@ -67,17 +74,32 @@ public class FPlayer implements SurfaceHolder.Callback {
         scan_file(path, fileAction);
     }
 
-    public void seekTime(float percent) {
-        resume();
-        seek(percent);
+    public void seekTime(final float percent) {
+        mControlHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                resume();
+                seek(percent);
+            }
+        });
     }
 
     public void onResume() {
-        resume();
+        mControlHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                resume();
+            }
+        });
     }
 
     public void onPause() {
-        pause();
+        mControlHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                pause();
+            }
+        });
     }
 
     public void onDestroy() {
@@ -90,7 +112,17 @@ public class FPlayer implements SurfaceHolder.Callback {
         try {
             mPlayThread.join();
         } catch (InterruptedException e) {
-            DLog.e("Join encountered an error!");
+            DLog.e("mPlayThread Join encountered an error!");
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            mControlThread.quitSafely();
+        } else {
+            mControlThread.quit();
+        }
+        try {
+            mControlThread.join();
+        } catch (InterruptedException e) {
+            DLog.e("mControlThread Join encountered an error!");
         }
         mSurface = null;
     }
@@ -106,8 +138,15 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     private void changeToPlay() {
-        release();
-        startPlay();
+        mControlHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                release();
+                mLock.lock();
+                mLock.unlock();
+                startPlay();
+            }
+        });
     }
 
     private void startPlay() {
@@ -125,6 +164,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Runnable playRunnable = new Runnable() {
         @Override
         public void run() {
+            mLock.lock();
             FPlayer.play(mSrcPath, mSurface, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
                 @Override
                 public void onProgress(int curTime, int totalTime) {
@@ -133,6 +173,7 @@ public class FPlayer implements SurfaceHolder.Callback {
                     }
                 }
             });
+            mLock.unlock();
         }
     };
 
@@ -150,14 +191,19 @@ public class FPlayer implements SurfaceHolder.Callback {
         mSurfaceWidth = width;
         mSurfaceHeight = height;
         mSurface = holder.getSurface();
-        Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
-        if (isDelayToPlay) {
-            isDelayToPlay = false;
-            startPlay();
-        } else {
-            FPlayer.update_surface(mSurface, width, height);
-            mOnSurfaceChange.change();
-        }
+        mControlHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                Log.i("OpenGL", "OpenGL: width: " + mSurfaceWidth + " height: " + mSurfaceHeight);
+                if (isDelayToPlay) {
+                    isDelayToPlay = false;
+                    startPlay();
+                } else {
+                    FPlayer.update_surface(mSurface, mSurfaceWidth, mSurfaceHeight);
+                    mOnSurfaceChange.change();
+                }
+            }
+        });
     }
 
     @Override
@@ -173,24 +219,24 @@ public class FPlayer implements SurfaceHolder.Callback {
         System.loadLibrary("fplayer");
     }
 
-    public static native void play(String path, Surface surface, int width, int height, OnProgressListener onProgressListener);
+    private static native void play(String path, Surface surface, int width, int height, OnProgressListener onProgressListener);
 
-    public static native void seek(float percent);
+    private static native void seek(float percent);
 
-    public static native long get_current_time();
+    private static native long get_current_time();
 
-    public static native long get_duration_time();
+    private static native long get_duration_time();
 
-    public static native void pause();
+    private static native void pause();
 
-    public static native void resume();
+    private static native void resume();
 
-    public static native int get_play_state();
+    private static native int get_play_state();
 
-    public static native void update_surface(Surface surface, int width, int height);
+    private static native void update_surface(Surface surface, int width, int height);
 
-    public static native void release();
+    private static native void release();
 
-    public static native void scan_file(String path, FileAction fileAction);
+    private static native void scan_file(String path, FileAction fileAction);
 
 }
