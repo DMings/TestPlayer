@@ -9,9 +9,7 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class FPlayer implements SurfaceHolder.Callback {
     public static class PlayStatus {
@@ -27,11 +25,9 @@ public class FPlayer implements SurfaceHolder.Callback {
     private boolean isDelayToPlay = false;
     private HandlerThread mPlayThread;
     private Handler mPlayHandler;
-    private HandlerThread mControlThread;
-    private Handler mControlHandler;
-    private Lock mLock = new ReentrantLock();
+    //    private Lock mLock = new ReentrantLock();
     private Runnable mPrepareRunnable;
-    private AtomicBoolean mPlayFinish = new AtomicBoolean(true);
+    private AtomicInteger mControlStatus = new AtomicInteger(PlayStatus.IDLE); // 0 idle 1 prepare 2 playing
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
     private int mSurfaceWidth;
     private int mSurfaceHeight;
@@ -44,9 +40,6 @@ public class FPlayer implements SurfaceHolder.Callback {
         mPlayThread = new HandlerThread("FPlayer");
         mPlayThread.start();
         mPlayHandler = new Handler(mPlayThread.getLooper());
-        mControlThread = new HandlerThread("FControl");
-        mControlThread.start();
-        mControlHandler = new Handler(mControlThread.getLooper());
     }
 
     public void setOnProgressListener(OnProgressListener onProgressListener, OnSurfaceChange onSurfaceChange) {
@@ -54,19 +47,19 @@ public class FPlayer implements SurfaceHolder.Callback {
         mOnSurfaceChange = onSurfaceChange;
     }
 
-    public boolean play(final String srcPath, Runnable prepareRunnable) {
+    public int play(final String srcPath, Runnable prepareRunnable) {
         mSrcPath = srcPath;
         mPrepareRunnable = prepareRunnable;
-        if (mPlayFinish.get()) {
-            mPlayFinish.set(false);
+        int ret = mControlStatus.get();
+        if (ret == PlayStatus.IDLE || ret == PlayStatus.PLAYING) {
             if (mSurface != null) {
                 changeToPlay();
             } else {
                 isDelayToPlay = true;
             }
-            return true;
-        } else {
-            return false;
+            return ret;
+        } else { // 处于正在准备
+            return ret;
         }
     }
 
@@ -74,32 +67,17 @@ public class FPlayer implements SurfaceHolder.Callback {
         scan_file(path, fileAction);
     }
 
-    public void seekTime(final float percent) {
-        mControlHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                resume();
-                seek(percent);
-            }
-        });
+    public void seekTime(float percent) {
+        resume();
+        seek(percent);
     }
 
     public void onResume() {
-        mControlHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                resume();
-            }
-        });
+        resume();
     }
 
     public void onPause() {
-        mControlHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                pause();
-            }
-        });
+        pause();
     }
 
     public void onDestroy() {
@@ -112,17 +90,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         try {
             mPlayThread.join();
         } catch (InterruptedException e) {
-            DLog.e("mPlayThread Join encountered an error!");
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            mControlThread.quitSafely();
-        } else {
-            mControlThread.quit();
-        }
-        try {
-            mControlThread.join();
-        } catch (InterruptedException e) {
-            DLog.e("mControlThread Join encountered an error!");
+            DLog.e("Join encountered an error!");
         }
         mSurface = null;
     }
@@ -138,22 +106,15 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     private void changeToPlay() {
-        mControlHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                release();
-                mLock.lock();
-                mLock.unlock();
-                startPlay();
-            }
-        });
+        release();
+        startPlay();
     }
 
     private void startPlay() {
         mPlayHandler.post(new Runnable() {
             @Override
             public void run() {
-                mPlayFinish.set(true);
+                mControlStatus.set(PlayStatus.PREPARE);
                 mMainHandle.post(mPrepareRunnable);
             }
         });
@@ -164,7 +125,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Runnable playRunnable = new Runnable() {
         @Override
         public void run() {
-            mLock.lock();
+            mControlStatus.set(PlayStatus.PLAYING);
             FPlayer.play(mSrcPath, mSurface, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
                 @Override
                 public void onProgress(int curTime, int totalTime) {
@@ -173,7 +134,7 @@ public class FPlayer implements SurfaceHolder.Callback {
                     }
                 }
             });
-            mLock.unlock();
+            mControlStatus.set(PlayStatus.IDLE);
         }
     };
 
@@ -191,19 +152,14 @@ public class FPlayer implements SurfaceHolder.Callback {
         mSurfaceWidth = width;
         mSurfaceHeight = height;
         mSurface = holder.getSurface();
-        mControlHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                Log.i("OpenGL", "OpenGL: width: " + mSurfaceWidth + " height: " + mSurfaceHeight);
-                if (isDelayToPlay) {
-                    isDelayToPlay = false;
-                    startPlay();
-                } else {
-                    FPlayer.update_surface(mSurface, mSurfaceWidth, mSurfaceHeight);
-                    mOnSurfaceChange.change();
-                }
-            }
-        });
+        Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
+        if (isDelayToPlay) {
+            isDelayToPlay = false;
+            startPlay();
+        } else {
+            FPlayer.update_surface(mSurface, width, height);
+            mOnSurfaceChange.change();
+        }
     }
 
     @Override
@@ -219,24 +175,24 @@ public class FPlayer implements SurfaceHolder.Callback {
         System.loadLibrary("fplayer");
     }
 
-    private static native void play(String path, Surface surface, int width, int height, OnProgressListener onProgressListener);
+    public static native void play(String path, Surface surface, int width, int height, OnProgressListener onProgressListener);
 
-    private static native void seek(float percent);
+    public static native void seek(float percent);
 
-    private static native long get_current_time();
+    public static native long get_current_time();
 
-    private static native long get_duration_time();
+    public static native long get_duration_time();
 
-    private static native void pause();
+    public static native void pause();
 
-    private static native void resume();
+    public static native void resume();
 
-    private static native int get_play_state();
+    public static native int get_play_state();
 
-    private static native void update_surface(Surface surface, int width, int height);
+    public static native void update_surface(Surface surface, int width, int height);
 
-    private static native void release();
+    public static native void release();
 
-    private static native void scan_file(String path, FileAction fileAction);
+    public static native void scan_file(String path, FileAction fileAction);
 
 }
