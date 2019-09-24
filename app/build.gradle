@@ -17,8 +17,22 @@ android {
             }
         }
     }
+    signingConfigs {
+        releaseSigning {
+            storeFile file("dming.jks")
+            keyAlias "dming"
+            keyPassword "123456"
+            storePassword "123456"
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.releaseSigning
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.releaseSigning
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
