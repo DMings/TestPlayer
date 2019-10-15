@@ -248,7 +248,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     final File srcFile = new File(mFilePath);
                     mPlaySv.setVisibility(View.VISIBLE);
-                    boolean b = mFPlayer.play(srcFile.toString(), new Runnable() {
+                    int ret = mFPlayer.play(srcFile.toString(), new Runnable() {
                         @Override
                         public void run() {
                             mIsPlaying = true;
@@ -256,8 +256,12 @@ public class MainActivity extends AppCompatActivity {
                             mPlayBtn.setImageResource(R.drawable.ic_button_pause);
                         }
                     });
-                    if (!b) {
-                        FToast.show(MainActivity.this, "视频切换中");
+                    if (ret != FPlayer.PlayStatus.IDLE) {
+                        if (ret == FPlayer.PlayStatus.PLAYING) {
+                            FToast.show(MainActivity.this, "视频切换中");
+                        } else if (ret == FPlayer.PlayStatus.PREPARE) {
+                            FToast.show(MainActivity.this, "视频准备中");
+                        }
                     }
                 }
                 removeAndPost();

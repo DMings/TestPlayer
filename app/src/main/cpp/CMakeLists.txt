@@ -20,8 +20,8 @@ add_library(
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)
 set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavcodec.so)
-add_library(avfilter SHARED IMPORTED)
-set_target_properties(avfilter PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavfilter.so)
+#add_library(avfilter SHARED IMPORTED)
+#set_target_properties(avfilter PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavfilter.so)
 add_library(avformat SHARED IMPORTED)
 set_target_properties(avformat PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavformat.so)
 add_library(avutil SHARED IMPORTED)
@@ -51,7 +51,7 @@ target_link_libraries(
         swresample
         avcodec
         avutil
-        avfilter
+#        avfilter
         log
         android
         OpenSLES
