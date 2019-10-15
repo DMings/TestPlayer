@@ -78,7 +78,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         mControlHandler.post(new Runnable() {
             @Override
             public void run() {
-                resume();
+//                resume();
                 seek(percent);
             }
         });

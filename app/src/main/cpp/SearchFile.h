@@ -11,6 +11,6 @@
 #include <sys/stat.h>
 #include <jni.h>
 
-extern void scan_file(JNIEnv *env,jobject dnPlayer,jmethodID updateFile, const char* path);
+void scan_file(JNIEnv *env,jobject dnPlayer,jmethodID updateFile, const char* path);
 
 #endif //TESTPLAYER_SEARCHFILE_H

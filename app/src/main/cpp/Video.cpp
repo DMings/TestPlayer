@@ -4,6 +4,8 @@
 
 #include "Video.h"
 
+PthreadSleep Video::pthread_sleep;
+
 Video::Video(UpdateTimeFun *fun) {
     dst_data[0] = NULL;
     updateTimeFun = fun;
@@ -79,6 +81,7 @@ void *Video::videoProcess(void *arg) {
         video->updateTimeFun->jvm_attach_fun();
     }
     LOGI("videoProcess: run!!!")
+    pthread_sleep.reset();
     while (true) {
         do {
 //            LOGE("video_pkt_list size: %d", video_pkt_list.size())
@@ -184,11 +187,12 @@ void *Video::videoProcess(void *arg) {
 //            LOGI("video delay->%d pts: %f get_master_clock: %f video_time: %f", delay, pts, get_master_clock(),
 //                 (get_master_clock() - video->test_video_time));
             if (delay >= 0) {
-                av_usleep((uint) delay * 1000); // us
+//                av_usleep((uint) delay * 1000); // us
+                pthread_sleep.msleep((uint) delay);
 //                LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
 //                     (get_master_clock() - video->test_video_time));
             }
-            video->test_video_time = get_master_clock();
+//            video->test_video_time = get_master_clock();
 
             pthread_mutex_lock(&c_mutex);
             if (video->will_update_surface) {
@@ -292,6 +296,7 @@ void Video::update_surface(ANativeWindow *window) {
 
 void Video::release() {
     LOGI("video pthread_join wait");
+    pthread_sleep.interrupt();
     pthread_mutex_lock(&c_mutex);
     thread_finish = true;
     pthread_cond_signal(&video_cond);

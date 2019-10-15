@@ -8,6 +8,7 @@
 #include "OpenGL.h"
 #include "Audio.h"
 #include "AV.h"
+#include "PthreadSleep.h"
 
 class Video : AV {
 public:
@@ -47,8 +48,8 @@ private:
     bool will_update_surface = false;
     UpdateTimeFun* updateTimeFun = NULL;
     bool has_audio = false;
-    //test
-    double test_video_time = 0;
+
+    static PthreadSleep pthread_sleep;
 
     uint synchronize_video(double pkt_duration);
 

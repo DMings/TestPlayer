@@ -9,24 +9,6 @@
 #include "Video.h"
 #include "SearchFile.h"
 
-extern int start_player(const char *src_filename, ANativeWindow *window,
-                        int width, int height,
-                        JNIEnv *env, jobject onProgressListener, jmethodID onProgress);
-
-extern void seek(float percent);
-
-extern int64_t get_current_time();
-
-extern int64_t get_duration_time();
-
-extern void pause();
-
-extern void resume();
-
-extern void update_surface(ANativeWindow *window, int width, int height);
-
-extern void release();
-
-extern JavaVM *native_jvm;
+extern void scan_file(JNIEnv *env,jobject dnPlayer,jmethodID updateFile, const char* path);
 
 #endif //TESTPLAYER_FFUTILS_H
