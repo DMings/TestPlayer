@@ -16,6 +16,7 @@ add_library(
         FPlayer.cpp
         SearchFile.cpp
         PthreadSleep.cpp
+        GLThread.cpp
         )
 find_library(log-lib log)
 add_library(avcodec SHARED IMPORTED)

@@ -74,9 +74,10 @@ void *Video::videoProcess(void *arg) {
     bool checkout_time = false;
     Video *video = (Video *) arg;
     FPacket *video_packet = NULL;
-    video->openGL.createEgl(video->mWindow, NULL);
-    video->openGL.surfaceChange(video->view_width, video->view_height,
+    video->glThread.surfaceCreated(video->mWindow);
+    video->glThread.surfaceChanged(video->view_width, video->view_height,
                                 video->av_dec_ctx->width, video->av_dec_ctx->height);
+    video->glThread.setDataSource(video->dst_data[0]);
     if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
@@ -170,7 +171,7 @@ void *Video::videoProcess(void *arg) {
             ret = sws_scale(video->sws_context,
                             (const uint8_t *const *) frame->data, frame->linesize,
                             0, video->av_dec_ctx->height,
-                            video->dst_data, video->dst_line_size);
+                            video->dst_data, video->dst_line_size); // lock
 //            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
 //                 get_audio_clock(),
 //                 get_master_clock(),
@@ -197,13 +198,13 @@ void *Video::videoProcess(void *arg) {
             pthread_mutex_lock(&c_mutex);
             if (video->will_update_surface) {
                 video->will_update_surface = false;
-                video->openGL.updateEgl(video->mWindow);
-                video->openGL.surfaceChange(video->view_width, video->view_height,
+//                video->glThread.updateEgl(video->mWindow);
+                video->glThread.surfaceChanged(video->view_width, video->view_height,
                                             video->av_dec_ctx->width, video->av_dec_ctx->height);
             }
             pthread_mutex_unlock(&c_mutex);
 
-            video->openGL.draw(video->dst_data[0]);
+            video->glThread.draw();
 
             pthread_mutex_lock(&video->pause_mutex);
             if (video->is_pause) {
@@ -220,7 +221,7 @@ void *Video::videoProcess(void *arg) {
         video->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
-    video->openGL.release(true);
+//    video->glThread.release(true);
     LOGI("videoProcess end video_pkt_list size: %d", video_pkt_list.size())
     return 0;
 }

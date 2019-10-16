@@ -5,7 +5,7 @@
 #ifndef TESTPLAYER_VIDEO_H
 #define TESTPLAYER_VIDEO_H
 
-#include "OpenGL.h"
+#include "GLThread.h"
 #include "Audio.h"
 #include "AV.h"
 #include "PthreadSleep.h"
@@ -36,8 +36,7 @@ private:
     AVStream *av_stream = NULL;
     SwsContext *sws_context = NULL;
     ANativeWindow *mWindow = NULL;
-    OpenGL openGL;
-//    OpenGL rotateGL;
+    GLThread glThread;
     uint8_t *dst_data[4];
     int dst_line_size[4];
     pthread_t p_video_tid = 0;

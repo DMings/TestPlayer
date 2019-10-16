@@ -116,7 +116,7 @@ int OpenGL::updateEgl(ANativeWindow *surface) {
     return -1;
 }
 
-void OpenGL::release(bool reset_view) {
+void OpenGL:: release(bool reset_view) {
     if (reset_view) {
         drawBackground();
     }
