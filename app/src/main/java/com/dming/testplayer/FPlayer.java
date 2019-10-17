@@ -20,9 +20,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     private OnProgressListener mOnProgressListener;
-    private Surface mSurface;
     private String mSrcPath;
-    private boolean isDelayToPlay = false;
     private HandlerThread mPlayThread;
     private Handler mPlayHandler;
     //    private Lock mLock = new ReentrantLock();
@@ -31,8 +29,6 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
     private int mSurfaceWidth;
     private int mSurfaceHeight;
-    private OnSurfaceChange mOnSurfaceChange;
-//    private EglHelper mEglHelper;
 
     public FPlayer(SurfaceView surfaceView) {
         surfaceView.getHolder().addCallback(this);
@@ -42,9 +38,8 @@ public class FPlayer implements SurfaceHolder.Callback {
         mPlayHandler = new Handler(mPlayThread.getLooper());
     }
 
-    public void setOnProgressListener(OnProgressListener onProgressListener, OnSurfaceChange onSurfaceChange) {
+    public void setOnProgressListener(OnProgressListener onProgressListener) {
         mOnProgressListener = onProgressListener;
-        mOnSurfaceChange = onSurfaceChange;
     }
 
     public int play(final String srcPath, Runnable prepareRunnable) {
@@ -52,11 +47,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         mPrepareRunnable = prepareRunnable;
         int ret = mControlStatus.get();
         if (ret == PlayStatus.IDLE || ret == PlayStatus.PLAYING) {
-            if (mSurface != null) {
-                changeToPlay();
-            } else {
-                isDelayToPlay = true;
-            }
+            changeToPlay();
             return ret;
         } else { // 处于正在准备
             return ret;
@@ -68,7 +59,6 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public void seekTime(float percent) {
-//        resume();
         seek(percent);
     }
 
@@ -92,7 +82,6 @@ public class FPlayer implements SurfaceHolder.Callback {
         } catch (InterruptedException e) {
             DLog.e("Join encountered an error!");
         }
-        mSurface = null;
     }
 
     public long getDurationTime() {
@@ -126,7 +115,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         @Override
         public void run() {
             mControlStatus.set(PlayStatus.PLAYING);
-            FPlayer.play(mSrcPath, mSurface, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
+            FPlayer.play(mSrcPath, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
                 @Override
                 public void onProgress(int curTime, int totalTime) {
                     if (mOnProgressListener != null) {
@@ -140,59 +129,48 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-//        mEglHelper.initEgl(null, holder.getSurface());
-//        mEglHelper.glBindThread();
+        surface_created(holder.getSurface());
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-//        GLES20.glClearColor(1, 0, 0, 1);
-//        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
-//        mEglHelper.swapBuffers();
         mSurfaceWidth = width;
         mSurfaceHeight = height;
-        mSurface = holder.getSurface();
         Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
-        if (isDelayToPlay) {
-            isDelayToPlay = false;
-            startPlay();
-        } else {
-            FPlayer.update_surface(mSurface, width, height);
-            mOnSurfaceChange.change();
-        }
+        surface_changed(holder.getSurface(), width, height);
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-//        mEglHelper.destroyEgl();
-    }
-
-    public interface OnSurfaceChange {
-        void change();
+        surface_destroyed();
     }
 
     static {
         System.loadLibrary("fplayer");
     }
 
-    public static native void play(String path, Surface surface, int width, int height, OnProgressListener onProgressListener);
+    private static native void play(String path, int width, int height, OnProgressListener onProgressListener);
 
-    public static native void seek(float percent);
+    private static native void seek(float percent);
 
-    public static native long get_current_time();
+    private static native long get_current_time();
 
-    public static native long get_duration_time();
+    private static native long get_duration_time();
 
-    public static native void pause();
+    private static native void pause();
 
-    public static native void resume();
+    private static native void resume();
 
-    public static native int get_play_state();
+    private static native int get_play_state();
 
-    public static native void update_surface(Surface surface, int width, int height);
+    private static native void surface_created(Surface surface);
 
-    public static native void release();
+    private static native void surface_changed(Surface surface, int width, int height);
 
-    public static native void scan_file(String path, FileAction fileAction);
+    private static native void surface_destroyed();
+
+    private static native void release();
+
+    private static native void scan_file(String path, FileAction fileAction);
 
 }

@@ -100,8 +100,8 @@ extern int32_t ff_sec_duration;
 
 extern void clearAllList();
 
-extern void ff_release();
-
 extern void ff_init();
+
+extern void ff_release();
 
 #endif //TESTPLAYER_FFAV_H

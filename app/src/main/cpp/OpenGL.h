@@ -31,7 +31,7 @@ public:
 
     void drawBackground();
 
-    void release(bool reset_view);
+    void release();
 
     EGLContext mEglContext = EGL_NO_CONTEXT;
 

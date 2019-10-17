@@ -13,19 +13,17 @@
 class Video : AV {
 public:
 
-    Video(UpdateTimeFun *fun);
+    Video(GLThread* glThread,UpdateTimeFun *fun);
 
     ~Video();
 
-    int open_stream(ANativeWindow *window, bool hasAudio);
+    int open_stream(bool hasAudio);
 
     void pause();
 
     void resume();
 
     void release();
-
-    void update_surface(ANativeWindow *window);
 
     int stream_id = -1;
 
@@ -35,8 +33,7 @@ private:
     AVCodecContext *av_dec_ctx = NULL;
     AVStream *av_stream = NULL;
     SwsContext *sws_context = NULL;
-    ANativeWindow *mWindow = NULL;
-    GLThread glThread;
+    GLThread* glThread;
     uint8_t *dst_data[4];
     int dst_line_size[4];
     pthread_t p_video_tid = 0;
@@ -44,7 +41,6 @@ private:
     bool is_pause = false;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
-    bool will_update_surface = false;
     UpdateTimeFun* updateTimeFun = NULL;
     bool has_audio = false;
 

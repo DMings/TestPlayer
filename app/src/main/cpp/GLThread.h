@@ -6,24 +6,28 @@
 #define TESTPLAYER_GLTHREAD_H
 
 #include "OpenGL.h"
-#include <cstdint>
 #include <pthread.h>
 #include <list>
 
 class GLThread {
 
 public:
-    void GLThread();
-    void ~GLThread();
+    GLThread();
+    ~GLThread();
     void surfaceCreated(ANativeWindow *surface);
-    void surfaceChanged(int view_width, int view_height,
-                        int tex_width, int tex_height);
+    void surfaceChanged(ANativeWindow *surface,int view_width, int view_height);
     void surfaceDestroyed();
 
-    void setDataSource(uint8_t *data);
+    void setParams(uint8_t *data,int tex_width, int tex_height);
     void draw();
-
+    void lockDraw();
+    void unlockDraw();
     std::list<int> command_list;
+    //
+    const static int CREATE_OR_UPDATE;
+    const static int CHANGE_SIZE;
+    const static int DESTROY;
+    const static int DRAW;
 private:
     OpenGL openGL;
     uint8_t *data = NULL;

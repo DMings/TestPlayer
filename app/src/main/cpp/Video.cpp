@@ -6,7 +6,8 @@
 
 PthreadSleep Video::pthread_sleep;
 
-Video::Video(UpdateTimeFun *fun) {
+Video::Video(GLThread* glThread,UpdateTimeFun *fun) {
+    this->glThread=  glThread;
     dst_data[0] = NULL;
     updateTimeFun = fun;
 }
@@ -74,10 +75,7 @@ void *Video::videoProcess(void *arg) {
     bool checkout_time = false;
     Video *video = (Video *) arg;
     FPacket *video_packet = NULL;
-    video->glThread.surfaceCreated(video->mWindow);
-    video->glThread.surfaceChanged(video->view_width, video->view_height,
-                                video->av_dec_ctx->width, video->av_dec_ctx->height);
-    video->glThread.setDataSource(video->dst_data[0]);
+    video->glThread->setParams(video->dst_data[0],video->av_dec_ctx->width, video->av_dec_ctx->height);
     if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
@@ -168,10 +166,13 @@ void *Video::videoProcess(void *arg) {
                 continue;
             }
             double pkt_duration = (int64_t) (av_q2d(video->av_stream->time_base) * frame->pkt_duration * 1000.0); // ms
+            video->glThread->lockDraw();
             ret = sws_scale(video->sws_context,
                             (const uint8_t *const *) frame->data, frame->linesize,
                             0, video->av_dec_ctx->height,
                             video->dst_data, video->dst_line_size); // lock
+            video->glThread->unlockDraw();
+
 //            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
 //                 get_audio_clock(),
 //                 get_master_clock(),
@@ -195,16 +196,7 @@ void *Video::videoProcess(void *arg) {
             }
 //            video->test_video_time = get_master_clock();
 
-            pthread_mutex_lock(&c_mutex);
-            if (video->will_update_surface) {
-                video->will_update_surface = false;
-//                video->glThread.updateEgl(video->mWindow);
-                video->glThread.surfaceChanged(video->view_width, video->view_height,
-                                            video->av_dec_ctx->width, video->av_dec_ctx->height);
-            }
-            pthread_mutex_unlock(&c_mutex);
-
-            video->glThread.draw();
+            video->glThread->draw();
 
             pthread_mutex_lock(&video->pause_mutex);
             if (video->is_pause) {
@@ -217,17 +209,17 @@ void *Video::videoProcess(void *arg) {
         free_packet(video_packet);
     }
     end:
+    video->glThread->setParams(NULL,0, 0);
     if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
-//    video->glThread.release(true);
     LOGI("videoProcess end video_pkt_list size: %d", video_pkt_list.size())
     return 0;
 }
 
-int Video::open_stream(ANativeWindow *window, bool hasAudio) {
-    mWindow = window;
+
+int Video::open_stream(bool hasAudio) {
     has_audio = hasAudio;
     pthread_cond_init(&video_cond, NULL);
     pthread_cond_init(&pause_cond, NULL);
@@ -282,19 +274,6 @@ void Video::resume() {
     LOGI("Video resume end")
 }
 
-
-void Video::update_surface(ANativeWindow *window) {
-    mWindow = window;
-    pthread_mutex_lock(&c_mutex);
-    will_update_surface = true;
-//    int ret = rotateGL.createEgl(NULL, openGL.mEglContext);
-//    LOGI("update_surface ret: %d", ret);
-//    rotateGL.surfaceChange(view_width, view_height,
-//                           av_dec_ctx->width, av_dec_ctx->height);
-//    rotateGL.release(true);
-    pthread_mutex_unlock(&c_mutex);
-}
-
 void Video::release() {
     LOGI("video pthread_join wait");
     pthread_sleep.interrupt();
@@ -323,7 +302,6 @@ void Video::release() {
         avcodec_free_context(&av_dec_ctx);
     }
     updateTimeFun = NULL;
-    mWindow = NULL;
     stream_id = 0;
     has_audio = false;
     av_stream = NULL;

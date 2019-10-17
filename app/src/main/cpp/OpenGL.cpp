@@ -56,7 +56,8 @@ int OpenGL::createEgl(ANativeWindow *surface, EGLContext eglContext) {
             EGL_NONE
     };
     mEglContext = eglCreateContext(mEglDisplay, eglConfig,
-                                   eglContext != NULL || eglConfig != EGL_NO_CONTEXT ? eglContext : EGL_NO_CONTEXT,
+                                   eglContext != NULL || eglConfig != EGL_NO_CONTEXT ? eglContext
+                                                                                     : EGL_NO_CONTEXT,
                                    context_attr);
     if (EGL_NO_CONTEXT == mEglContext) {
         return -6;
@@ -108,18 +109,12 @@ void OpenGL::surfaceChange(int view_width, int view_height,
 }
 
 int OpenGL::updateEgl(ANativeWindow *surface) {
-    if (isCreateEgl) {
-        release(false);
-        int ret = createEgl(surface, NULL);
-        return ret;
-    }
-    return -1;
+    release();
+    int ret = createEgl(surface, NULL);
+    return ret;
 }
 
-void OpenGL:: release(bool reset_view) {
-    if (reset_view) {
-        drawBackground();
-    }
+void OpenGL::release() {
     isCreateEgl = false;
     deleteTexture();
     if (mEglDisplay != EGL_NO_DISPLAY) {
@@ -165,10 +160,12 @@ void OpenGL::deleteTexture() {
 }
 
 void OpenGL::draw(void *pixels) {
+    \
     glClear(GL_COLOR_BUFFER_BIT);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mTexWidth, mTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mTexWidth, mTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
     glRender.onDraw(mTexture);
     eglSwapBuffers(mEglDisplay, mEglSurface);

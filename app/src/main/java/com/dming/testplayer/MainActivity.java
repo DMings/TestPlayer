@@ -1,6 +1,7 @@
 package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
+import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -108,13 +109,6 @@ public class MainActivity extends AppCompatActivity {
                         mHandler.post(textRunnable);
                     }
                 }
-            }
-        }, new FPlayer.OnSurfaceChange() {
-            @Override
-            public void change() {
-                mIsPlaying = true;
-                mFPlayer.onResume();
-                mPlayBtn.setImageResource(R.drawable.ic_button_pause);
             }
         });
         mPlaySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {

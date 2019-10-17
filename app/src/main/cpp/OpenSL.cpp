@@ -2,7 +2,7 @@
 // Created by Administrator on 2019/8/20.
 //
 
-#include <unistd.h>
+//#include <unistd.h>
 #include <pthread.h>
 #include "OpenSL.h"
 
