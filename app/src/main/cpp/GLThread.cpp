@@ -17,18 +17,12 @@ void *GLThread::glProcess(void *arg) {
             int command = glThread->command_list.front();
             glThread->command_list.pop_front();
             if (command == GLThread::CHANGE_SIZE) {
-                LOGI("GLThread::CHANGE view_width %d, view_height %d tex_width %d, tex_height %d",
-                     glThread->view_width, glThread->view_height,
-                     glThread->tex_width, glThread->tex_height);
                 glThread->openGL.surfaceChange(glThread->view_width, glThread->view_height,
                                                glThread->tex_width, glThread->tex_height);
                 if (glThread->data != NULL) {
                     glThread->openGL.draw(glThread->data);
                 }
             } else if (command == GLThread::CREATE_OR_UPDATE) {
-                LOGI("GLThread::UPDATE view_width %d, view_height %d tex_width %d, tex_height %d",
-                     glThread->view_width, glThread->view_height,
-                     glThread->tex_width, glThread->tex_height);
                 glThread->openGL.updateEgl(glThread->surface);
                 glThread->openGL.surfaceChange(glThread->view_width, glThread->view_height,
                                                glThread->tex_width, glThread->tex_height);
@@ -36,11 +30,12 @@ void *GLThread::glProcess(void *arg) {
                     glThread->openGL.draw(glThread->data);
                 }
             } else if (command == GLThread::DESTROY) {
-                LOGE("GLThread::DESTROY");
+                LOGI("GLThread::DESTROY");
                 glThread->gl_finish = true;
                 glThread->openGL.release();
-                glThread->data = NULL;
-            } else if (command == 4) {
+                pthread_mutex_unlock(&glThread->gl_mutex);
+                return NULL;
+            } else if (command == GLThread::DRAW) {
                 if (glThread->data != NULL) {
                     glThread->openGL.draw(glThread->data);
                 }
@@ -63,20 +58,27 @@ GLThread::~GLThread() {
 }
 
 void GLThread::surfaceCreated(ANativeWindow *surface) {
-    LOGE("GLThread::surfaceCreated");
+    LOGI("GLThread::surfaceCreated");
     this->surface = surface;
     pthread_mutex_lock(&gl_mutex);
     this->gl_finish = false;
     pthread_mutex_unlock(&gl_mutex);
-    pthread_create(&p_gl_tid, 0, GLThread::glProcess, this);
+    pthread_create(&p_gl_tid, NULL, GLThread::glProcess, this);
 }
 
 void GLThread::surfaceChanged(ANativeWindow *surface, int view_width, int view_height) {
-    LOGE("GLThread::surfaceChanged");
+    LOGI("GLThread::surfaceChanged");
     this->view_width = view_width;
     this->view_height = view_height;
     pthread_mutex_lock(&gl_mutex);
     if (!this->gl_finish) {
+        for (std::list<int>::iterator it = command_list.begin(); it != command_list.end();) {
+            if (*it == GLThread::DRAW) {
+                command_list.erase(it++);
+            } else {
+                ++it;
+            }
+        }
         this->command_list.push_back(GLThread::CREATE_OR_UPDATE); // surface发生改变要更新
     }
     pthread_cond_signal(&gl_cond);
@@ -85,14 +87,15 @@ void GLThread::surfaceChanged(ANativeWindow *surface, int view_width, int view_h
 }
 
 void GLThread::surfaceDestroyed() {
-    LOGE("GLThread::surfaceDestroyed");
+    LOGI("GLThread::surfaceDestroyed");
     pthread_mutex_lock(&gl_mutex);
+    this->command_list.clear();
     this->command_list.push_back(GLThread::DESTROY);
     pthread_cond_signal(&gl_cond);
     pthread_mutex_unlock(&gl_mutex);
-    pthread_join(p_gl_tid, 0);
-    p_gl_tid = 0;
-    LOGE("GLThread::surfaceDestroyed done");
+    pthread_join(p_gl_tid, NULL);
+    p_gl_tid = NULL;
+    LOGI("GLThread::surfaceDestroyed done");
 }
 
 void GLThread::setParams(uint8_t *data, int tex_width, int tex_height) {
@@ -109,8 +112,9 @@ void GLThread::setParams(uint8_t *data, int tex_width, int tex_height) {
 
 void GLThread::draw() {
     pthread_mutex_lock(&gl_mutex);
-    this->command_list.clear();
-    this->command_list.push_back(GLThread::DRAW);
+    if (!this->gl_finish) {
+        this->command_list.push_back(GLThread::DRAW);
+    }
     pthread_cond_signal(&gl_cond);
     pthread_mutex_unlock(&gl_mutex);
 }

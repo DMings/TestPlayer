@@ -85,7 +85,6 @@ void OpenGL::surfaceChange(int view_width, int view_height,
     glViewport(0, 0, view_width, view_height);
     mTexWidth = tex_width;
     mTexHeight = tex_height;
-    LOGI("OpenGL income width %d, surface height %d", view_width, view_height);
     float ratioY = 1;
     float ratioX = 1;
     float rTex = 1.0F * mTexWidth / mTexHeight;
@@ -109,7 +108,9 @@ void OpenGL::surfaceChange(int view_width, int view_height,
 }
 
 int OpenGL::updateEgl(ANativeWindow *surface) {
-    release();
+    if (isCreateEgl) {
+        release();
+    }
     int ret = createEgl(surface, NULL);
     return ret;
 }
@@ -160,7 +161,6 @@ void OpenGL::deleteTexture() {
 }
 
 void OpenGL::draw(void *pixels) {
-    \
     glClear(GL_COLOR_BUFFER_BIT);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mTexture);

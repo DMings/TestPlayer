@@ -31,7 +31,7 @@ public:
 private:
     OpenGL openGL;
     uint8_t *data = NULL;
-    pthread_t p_gl_tid = 0;
+    pthread_t p_gl_tid = NULL;
     bool gl_finish = false;
     static void *glProcess(void *arg);
     //

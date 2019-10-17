@@ -1,7 +1,6 @@
 package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
-import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -9,7 +8,17 @@ import android.os.Looper;
 import android.support.v7.app.AppCompatActivity;
 import android.view.SurfaceView;
 import android.view.View;
-import android.widget.*;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.BaseAdapter;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.ProgressBar;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -90,9 +99,8 @@ public class MainActivity extends AppCompatActivity {
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            removePost();
                             mIsPlaying = false;
-                            mCurTimeTv.setText(DUtils.secToTime(mTotalTime));
+                            mCurTimeTv.setText("00:00");
                             mPlayBtn.setImageResource(R.drawable.ic_button_play);
                             mPlayBtn.setVisibility(View.GONE);
                             mControlLL.setVisibility(View.VISIBLE);
@@ -119,14 +127,12 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
-                removePost();
                 mIsSeeking = true;
             }
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
                 mFPlayer.seekTime(1.0f * seekBar.getProgress() / seekBar.getMax());
-                removeAndPost();
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
@@ -146,7 +152,6 @@ public class MainActivity extends AppCompatActivity {
                     fullBtn.setImageResource(R.drawable.ic_button_full);
                     setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
                 }
-                removeAndPost();
             }
         });
         FrameLayout baseLayout = findViewById(R.id.baseLayout);
@@ -258,20 +263,9 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                removeAndPost();
             }
         });
     }
-
-    private void removeAndPost() {
-//        removePost();
-//        mHandler.sendEmptyMessageDelayed(UPDATE_UI, 3000);
-    }
-
-    private void removePost() {
-//        mHandler.removeMessages(UPDATE_UI);
-    }
-
 
     private Runnable textRunnable = new Runnable() {
         @Override
@@ -296,7 +290,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        mFPlayer.onResume();
+        if (mIsPlaying) {
+            mFPlayer.onResume();
+        }
     }
 
 
