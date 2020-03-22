@@ -25,6 +25,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Handler mPlayHandler;
     //    private Lock mLock = new ReentrantLock();
     private Runnable mPrepareRunnable;
+    private Runnable mErrorRunnable;
     private AtomicInteger mControlStatus = new AtomicInteger(PlayStatus.IDLE); // 0 idle 1 prepare 2 playing
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
     private int mSurfaceWidth;
@@ -42,15 +43,16 @@ public class FPlayer implements SurfaceHolder.Callback {
         mOnProgressListener = onProgressListener;
     }
 
-    public int play(final String srcPath, Runnable prepareRunnable) {
+    public int play(final String srcPath, Runnable prepareRunnable, Runnable errorRunnable) {
         mSrcPath = srcPath;
         mPrepareRunnable = prepareRunnable;
+        mErrorRunnable = errorRunnable;
         int ret = mControlStatus.get();
         if (ret == PlayStatus.IDLE || ret == PlayStatus.PLAYING) {
             changeToPlay();
-            return ret;
+            return mControlStatus.get();
         } else { // 处于正在准备
-            return ret;
+            return mControlStatus.get();
         }
     }
 
@@ -115,7 +117,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         @Override
         public void run() {
             mControlStatus.set(PlayStatus.PLAYING);
-            FPlayer.play(mSrcPath, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
+            int ret = FPlayer.play(mSrcPath, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
                 @Override
                 public void onProgress(int curTime, int totalTime) {
                     if (mOnProgressListener != null) {
@@ -123,7 +125,13 @@ public class FPlayer implements SurfaceHolder.Callback {
                     }
                 }
             });
+            DLog.i("PlayStatus.IDLE");
             mControlStatus.set(PlayStatus.IDLE);
+            if (ret < 0) {
+                if (mErrorRunnable != null) {
+                    mErrorRunnable.run();
+                }
+            }
         }
     };
 
@@ -149,7 +157,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         System.loadLibrary("fplayer");
     }
 
-    private static native void play(String path, int width, int height, OnProgressListener onProgressListener);
+    private static native int play(String path, int width, int height, OnProgressListener onProgressListener);
 
     private static native void seek(float percent);
 

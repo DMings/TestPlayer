@@ -52,6 +52,7 @@ void refresh_finish(JNIEnv *env, jobject p_obj, jmethodID progress) {
 int start_player(const char *src_filename,
                  int width, int height,
                  JNIEnv *env, jobject progressObj, jmethodID onProgress) {
+    int ret_play = 0;
     int ret = 0;
     bool cr;
     bool p;
@@ -123,6 +124,7 @@ int start_player(const char *src_filename,
         LOGI("Demuxing succeeded.");
     } else {
         LOGE("Could not find audio or video stream in the input, aborting");
+        ret_play = -8;
     }
     pthread_mutex_lock(&play_mutex);
     play_status = STOPPING;
@@ -144,7 +146,7 @@ int start_player(const char *src_filename,
     pthread_mutex_lock(&play_mutex);
     play_status = IDLE;
     pthread_mutex_unlock(&play_mutex);
-    return 0;
+    return ret_play;
 }
 
 void f_seek(float percent) {
@@ -210,13 +212,14 @@ int64_t get_duration_time() {
 
 ////// jni ///////////////////////////////////////////////////////////
 
-void play_jni(JNIEnv *env, jclass type, jstring path_, jint width, jint height,
+jint play_jni(JNIEnv *env, jclass type, jstring path_, jint width, jint height,
               jobject onProgressListener) {
     const char *path = env->GetStringUTFChars(path_, NULL);
     jclass plClass = env->GetObjectClass(onProgressListener);
     jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(II)V");
-    start_player(path, width, height, env, onProgressListener, onProgress);
+    int ret = start_player(path, width, height, env, onProgressListener, onProgress);
     env->ReleaseStringUTFChars(path_, path);
+    return ret;
 }
 
 void seek_jni(JNIEnv *env, jclass type, jfloat percent) {
@@ -278,7 +281,7 @@ jint get_play_state_jni(JNIEnv *env, jclass type) {
 //Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,jobject onProgressListener)
 //"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
 
-JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;IILcom/dming/testplayer/OnProgressListener;)V", (void *) play_jni},
+JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;IILcom/dming/testplayer/OnProgressListener;)I", (void *) play_jni},
                             {"seek",              "(F)V",                                                             (void *) seek_jni},
                             {"pause",             "()V",                                                              (void *) pause_jni},
                             {"resume",            "()V",                                                              (void *) resume_jni},

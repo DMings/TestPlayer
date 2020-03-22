@@ -85,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 if (mFilePath == null) {
-                    FToast.show(MainActivity.this, "当前无视频文件可播放");
+                    Toast.makeText(MainActivity.this, "当前无视频文件可播放", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 playOrPause(false);
@@ -254,13 +254,19 @@ public class MainActivity extends AppCompatActivity {
                             mTvSrc.setText(srcFile.getName());
                             mPlayBtn.setImageResource(R.drawable.ic_button_pause);
                         }
-                    });
-                    if (ret != FPlayer.PlayStatus.IDLE) {
-                        if (ret == FPlayer.PlayStatus.PLAYING) {
-                            FToast.show(MainActivity.this, "视频切换中");
-                        } else if (ret == FPlayer.PlayStatus.PREPARE) {
-                            FToast.show(MainActivity.this, "视频准备中");
+                    }, new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, "视频播放失败", Toast.LENGTH_SHORT).show();
                         }
+                    });
+                    DLog.i("ret=" + ret);
+                    if (ret != FPlayer.PlayStatus.IDLE) {
+//                        if (ret == FPlayer.PlayStatus.PLAYING) {
+//                            Toast.makeText(MainActivity.this, "视频切换中", Toast.LENGTH_SHORT).show();
+//                        } else if (ret == FPlayer.PlayStatus.PREPARE) {
+//                            Toast.makeText(MainActivity.this, "视频准备中", Toast.LENGTH_SHORT).show();
+//                        }
                     }
                 }
             }

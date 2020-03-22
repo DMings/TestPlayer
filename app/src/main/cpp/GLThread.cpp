@@ -19,9 +19,9 @@ void *GLThread::glProcess(void *arg) {
             if (command == GLThread::CHANGE_SIZE) {
                 glThread->openGL.surfaceChange(glThread->view_width, glThread->view_height,
                                                glThread->tex_width, glThread->tex_height);
-                if (glThread->data != NULL) {
-                    glThread->openGL.draw(glThread->data);
-                }
+//                if (glThread->data != NULL) {
+//                    glThread->openGL.draw(glThread->data);
+//                }
             } else if (command == GLThread::CREATE_OR_UPDATE) {
                 glThread->openGL.updateEgl(glThread->surface);
                 glThread->openGL.surfaceChange(glThread->view_width, glThread->view_height,
@@ -38,6 +38,8 @@ void *GLThread::glProcess(void *arg) {
             } else if (command == GLThread::DRAW) {
                 if (glThread->data != NULL) {
                     glThread->openGL.draw(glThread->data);
+                } else {
+                    LOGI("GLThread::DRAW: %p", glThread->data)
                 }
             }
         }
@@ -59,8 +61,8 @@ GLThread::~GLThread() {
 
 void GLThread::surfaceCreated(ANativeWindow *surface) {
     LOGI("GLThread::surfaceCreated");
-    this->surface = surface;
     pthread_mutex_lock(&gl_mutex);
+    this->surface = surface;
     this->gl_finish = false;
     pthread_mutex_unlock(&gl_mutex);
     pthread_create(&p_gl_tid, NULL, GLThread::glProcess, this);
@@ -68,9 +70,10 @@ void GLThread::surfaceCreated(ANativeWindow *surface) {
 
 void GLThread::surfaceChanged(ANativeWindow *surface, int view_width, int view_height) {
     LOGI("GLThread::surfaceChanged");
+    pthread_mutex_lock(&gl_mutex);
+    this->surface = surface;
     this->view_width = view_width;
     this->view_height = view_height;
-    pthread_mutex_lock(&gl_mutex);
     if (!this->gl_finish) {
         for (std::list<int>::iterator it = command_list.begin(); it != command_list.end();) {
             if (*it == GLThread::DRAW) {
@@ -99,11 +102,12 @@ void GLThread::surfaceDestroyed() {
 }
 
 void GLThread::setParams(uint8_t *data, int tex_width, int tex_height) {
+    pthread_mutex_lock(&gl_mutex);
+    this->data = data;
     this->tex_width = tex_width;
     this->tex_height = tex_height;
-    this->data = data;
-    pthread_mutex_lock(&gl_mutex);
-    if (!this->gl_finish) {
+    LOGI("setParams: %p", this->data)
+    if (!this->gl_finish && this->data != NULL) {
         this->command_list.push_back(GLThread::CHANGE_SIZE);
     }
     pthread_cond_signal(&gl_cond);

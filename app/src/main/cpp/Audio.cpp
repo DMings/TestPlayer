@@ -134,7 +134,8 @@ void *Audio::audioProcess(void *arg) {
         ret = avcodec_send_packet(audio->av_dec_ctx, audio_packet->avPacket);
 //        pthread_mutex_unlock(&seek_mutex);
         if (ret < 0) {
-            LOGE("Error audio sending a packet for decoding audio_pkt_list size: %d", audio_pkt_list.size());
+            LOGE("Error audio sending a packet for decoding audio_pkt_list size: %d",
+                 audio_pkt_list.size());
             av_packet_free(&audio_packet->avPacket);
             free_packet(audio_packet);
             pthread_mutex_lock(&c_mutex);
@@ -152,7 +153,8 @@ void *Audio::audioProcess(void *arg) {
             if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                 break;
-            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) || ret == AVERROR_INPUT_CHANGED) {
+            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) ||
+                       ret == AVERROR_INPUT_CHANGED) {
                 LOGE("audio some err!");
                 break;
             } else if (ret < 0) {
@@ -261,13 +263,15 @@ int Audio::open_stream() {
     LOGI("stream_id: %d", stream_id);
     if (ret >= 0) {
         av_stream = fmt_ctx->streams[stream_id];
-    }else {
+    } else {
         stream_id = -1;
     }
     if (av_stream) {
         int out_sample_rate = av_dec_ctx->sample_rate;
-        LOGI("ffplay -ac %d -ar %d byte %d fmt_name:%s", av_dec_ctx->channels, av_dec_ctx->sample_rate,
-             av_get_bytes_per_sample(av_dec_ctx->sample_fmt), av_get_sample_fmt_name(av_dec_ctx->sample_fmt));
+        LOGI("ffplay -ac %d -ar %d byte %d fmt_name:%s", av_dec_ctx->channels,
+             av_dec_ctx->sample_rate,
+             av_get_bytes_per_sample(av_dec_ctx->sample_fmt),
+             av_get_sample_fmt_name(av_dec_ctx->sample_fmt));
         int sr = openSL.getSupportSampleRate(av_dec_ctx->sample_rate);
         if (!sr) {
             out_sample_rate = 44100;
@@ -285,13 +289,16 @@ int Audio::open_stream() {
         slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
         slConfigure.sampleRate = out_sample_rate;
         slConfigure.signSlBufferCallback = slBufferCallback;
-        openSL.createPlayer(&slConfigure);
-        swr_context = swr_alloc();
-        swr_alloc_set_opts(swr_context,
-                           AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, out_sample_rate,
-                           av_dec_ctx->channel_layout, av_dec_ctx->sample_fmt, av_dec_ctx->sample_rate,
-                           1, NULL);
-        ret = swr_init(swr_context);
+        ret = openSL.createPlayer(&slConfigure);
+        if (ret == 0) {
+            swr_context = swr_alloc();
+            swr_alloc_set_opts(swr_context,
+                               AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, out_sample_rate,
+                               av_dec_ctx->channel_layout, av_dec_ctx->sample_fmt,
+                               av_dec_ctx->sample_rate,
+                               1, NULL);
+            ret = swr_init(swr_context);
+        }
         if (ret == 0) {
             LOGI("swr_init success create Thread");
             openSL.play();
