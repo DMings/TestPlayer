@@ -8,6 +8,7 @@ const int GLThread::CREATE_OR_UPDATE = 1;
 const int GLThread::CHANGE_SIZE = 2;
 const int GLThread::DESTROY = 3;
 const int GLThread::DRAW = 4;
+const int GLThread::CLEAN_DRAW = 5;
 
 void *GLThread::glProcess(void *arg) {
     GLThread *glThread = (GLThread *) (arg);
@@ -41,6 +42,8 @@ void *GLThread::glProcess(void *arg) {
                 } else {
                     LOGI("GLThread::DRAW: %p", glThread->data)
                 }
+            } else if (command == GLThread::CLEAN_DRAW) {
+                glThread->openGL.drawBackground();
             }
         }
         pthread_cond_wait(&glThread->gl_cond, &glThread->gl_mutex);
@@ -118,6 +121,15 @@ void GLThread::draw() {
     pthread_mutex_lock(&gl_mutex);
     if (!this->gl_finish) {
         this->command_list.push_back(GLThread::DRAW);
+    }
+    pthread_cond_signal(&gl_cond);
+    pthread_mutex_unlock(&gl_mutex);
+}
+
+void GLThread::drawBackground() {
+    pthread_mutex_lock(&gl_mutex);
+    if (!this->gl_finish) {
+        this->command_list.push_back(GLThread::CLEAN_DRAW);
     }
     pthread_cond_signal(&gl_cond);
     pthread_mutex_unlock(&gl_mutex);

@@ -20,6 +20,7 @@ public:
 
     void setParams(uint8_t *data,int tex_width, int tex_height);
     void draw();
+    void drawBackground();
     void lockDraw();
     void unlockDraw();
     std::list<int> command_list;
@@ -28,6 +29,7 @@ public:
     const static int CHANGE_SIZE;
     const static int DESTROY;
     const static int DRAW;
+    const static int CLEAN_DRAW;
 private:
     OpenGL openGL;
     uint8_t *data = NULL;

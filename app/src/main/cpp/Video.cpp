@@ -210,6 +210,7 @@ void *Video::videoProcess(void *arg) {
     }
     end:
     video->glThread->setParams(NULL,0, 0);
+    video->glThread->drawBackground();
     if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_detach_fun();
     }

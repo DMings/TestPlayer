@@ -26,6 +26,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     //    private Lock mLock = new ReentrantLock();
     private Runnable mPrepareRunnable;
     private Runnable mErrorRunnable;
+    private Runnable mEndRunnable;
     private AtomicInteger mControlStatus = new AtomicInteger(PlayStatus.IDLE); // 0 idle 1 prepare 2 playing
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
     private int mSurfaceWidth;
@@ -43,9 +44,10 @@ public class FPlayer implements SurfaceHolder.Callback {
         mOnProgressListener = onProgressListener;
     }
 
-    public int play(final String srcPath, Runnable prepareRunnable, Runnable errorRunnable) {
+    public int play(final String srcPath, Runnable prepareRunnable, Runnable endRunnable, Runnable errorRunnable) {
         mSrcPath = srcPath;
         mPrepareRunnable = prepareRunnable;
+        mEndRunnable = endRunnable;
         mErrorRunnable = errorRunnable;
         int ret = mControlStatus.get();
         if (ret == PlayStatus.IDLE || ret == PlayStatus.PLAYING) {
@@ -130,6 +132,10 @@ public class FPlayer implements SurfaceHolder.Callback {
             if (ret < 0) {
                 if (mErrorRunnable != null) {
                     mErrorRunnable.run();
+                }
+            } else {
+                if (mEndRunnable != null) {
+                    mEndRunnable.run();
                 }
             }
         }

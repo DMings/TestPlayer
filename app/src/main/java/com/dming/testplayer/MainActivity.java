@@ -158,27 +158,7 @@ public class MainActivity extends AppCompatActivity {
         baseLayout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mFileLayout.setVisibility(mFileListShow ? View.VISIBLE : View.GONE);
-                if (!mFileListShow) {
-                    if (mIsShowPlayUI) {
-                        mIsShowPlayUI = false;
-                        mPlayBtn.setVisibility(View.GONE);
-                        mControlLL.setVisibility(View.GONE);
-                        mTvSrc.setVisibility(View.GONE);
-                        mTitleLayout.setVisibility(View.GONE);
-                    } else {
-                        mIsShowPlayUI = true;
-                        mPlayBtn.setVisibility(View.VISIBLE);
-                        mControlLL.setVisibility(View.VISIBLE);
-                        mTvSrc.setVisibility(View.VISIBLE);
-                        mTitleLayout.setVisibility(View.VISIBLE);
-                    }
-                } else {
-                    mFileListShow = false;
-                    mFileLayout.setVisibility(View.GONE);
-                    mPlayBtn.setVisibility(View.VISIBLE);
-//                    removeAndPost();
-                }
+                setVisible();
             }
         });
 
@@ -229,6 +209,29 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void setVisible() {
+        mFileLayout.setVisibility(mFileListShow ? View.VISIBLE : View.GONE);
+        if (!mFileListShow) {
+            if (mIsShowPlayUI) {
+                mIsShowPlayUI = false;
+                mPlayBtn.setVisibility(View.GONE);
+                mControlLL.setVisibility(View.GONE);
+                mTvSrc.setVisibility(View.GONE);
+                mTitleLayout.setVisibility(View.GONE);
+            } else {
+                mIsShowPlayUI = true;
+                mPlayBtn.setVisibility(View.VISIBLE);
+                mControlLL.setVisibility(View.VISIBLE);
+                mTvSrc.setVisibility(View.VISIBLE);
+                mTitleLayout.setVisibility(View.VISIBLE);
+            }
+        } else {
+            mFileListShow = false;
+            mFileLayout.setVisibility(View.GONE);
+            mPlayBtn.setVisibility(View.VISIBLE);
+//                    removeAndPost();
+        }
+    }
 
     private void playOrPause(final boolean isChangeFile) {
         PermissionFragment.checkPermission(this, new Runnable() {
@@ -248,6 +251,12 @@ public class MainActivity extends AppCompatActivity {
                     final File srcFile = new File(mFilePath);
                     mPlaySv.setVisibility(View.VISIBLE);
                     int ret = mFPlayer.play(srcFile.toString(), new Runnable() {
+                        @Override
+                        public void run() {
+                            mIsShowPlayUI = false;
+                            setVisible();
+                        }
+                    }, new Runnable() {
                         @Override
                         public void run() {
                             mIsPlaying = true;
