@@ -2,7 +2,7 @@
 
 #### 实现效果如下，代码仅供参考学习，要稳定建议使用ijkplayer
 
-- 可下载看看 [演示apk](https://github.com/DMings/SmartScan/blob/master/demosrc/app-debug.apk)
+- 可下载看看 [演示apk](https://github.com/DMings/TestPlayer/blob/master/demosrc/app-debug.apk)
 
 ![视频seek旋转](https://github.com/DMings/TestPlayer/blob/master/demosrc/seek_rotation.gif)
 ![视频切换](https://github.com/DMings/TestPlayer/blob/master/demosrc/change_play.gif)
