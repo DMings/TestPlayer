@@ -88,7 +88,7 @@ extern void decode_packet(AVPacket *pkt, int audio_stream_id, int video_stream_i
 extern bool audio_seeking;
 extern bool video_seeking;
 
-extern int seek_frame_if_need(AVCodecContext *video_dec_ctx,AVCodecContext *audio_dec_ctx);
+extern int seek_frame_if_need();
 
 extern bool crash_error;
 

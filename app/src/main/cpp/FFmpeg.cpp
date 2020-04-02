@@ -210,7 +210,7 @@ void clearAllList() {
     }
 }
 
-int seek_frame_if_need(AVCodecContext *video_dec_ctx, AVCodecContext *audio_dec_ctx) {
+int seek_frame_if_need() {
     int ret = 0;
     pthread_mutex_lock(&c_mutex);
     if (want_seek) {
@@ -219,7 +219,7 @@ int seek_frame_if_need(AVCodecContext *video_dec_ctx, AVCodecContext *audio_dec_
         want_audio_seek_inner = true;
         want_video_seek_inner = true;
         pthread_mutex_lock(&seek_mutex);
-        avformat_flush(fmt_ctx);
+//        avformat_flush(fmt_ctx);
 //        avcodec_flush_buffers(video_dec_ctx);
 //        if (audio_dec_ctx != NULL) {
 //            avcodec_flush_buffers(audio_dec_ctx);

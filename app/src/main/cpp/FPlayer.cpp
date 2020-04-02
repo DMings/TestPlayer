@@ -101,7 +101,7 @@ int start_player(const char *src_filename,
         ff_sec_duration = 1; //ms
     }
     int audio_ret = audio->open_stream();
-//    int audio_ret = 1;
+//    int audio_ret = -1;
     int video_ret = video->open_stream(audio_ret >= 0);
 //    int video_ret = 1;
     if (video_ret >= 0 || audio_ret >= 0) {
@@ -113,20 +113,12 @@ int start_player(const char *src_filename,
         do {
             pthread_mutex_lock(&c_mutex);
             cr = crash_error;
-            if (cr) {
-                clearAllList();
-            }
             pthread_mutex_unlock(&c_mutex);
             if (cr) {
+                clearAllList();
                 break;
             }
-            ret = seek_frame_if_need(video->av_dec_ctx,
-                                     audio->stream_id != -1 ? audio->av_dec_ctx : NULL);
-            if (ret > 0) {
-                pkt->data = NULL;
-                pkt->size = 0;
-                avcodec_flush_buffers(video->av_dec_ctx);
-            }
+            ret = seek_frame_if_need();
             ret = av_read_frame(fmt_ctx, pkt);
             decode_packet(pkt, audio->stream_id, video->stream_id);
         } while (ret >= 0);
