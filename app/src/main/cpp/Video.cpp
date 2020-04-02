@@ -228,12 +228,12 @@ int Video::open_stream(bool hasAudio) {
     int ret = open_codec_context(&stream_id, &av_dec_ctx,
                                  fmt_ctx, AVMEDIA_TYPE_VIDEO);
     if (ret >= 0) {
-        int nb_cpu_s = av_cpu_count();
-        if (nb_cpu_s == 0) {
-            nb_cpu_s = 8;
-        }
-        av_dec_ctx->thread_count = nb_cpu_s;
-        LOGI("nb_cpu_s: %d", nb_cpu_s);
+//        int nb_cpu_s = av_cpu_count();
+//        if (nb_cpu_s == 0) {
+//            nb_cpu_s = 8;
+//        }
+//        av_dec_ctx->thread_count = nb_cpu_s;
+//        LOGI("nb_cpu_s: %d", nb_cpu_s);
         av_stream = fmt_ctx->streams[stream_id];
         LOGI("ffplay -f rawvideo -pix_fmt %s -video_size %d x %d",
              av_get_pix_fmt_name(av_dec_ctx->pix_fmt), av_dec_ctx->width, av_dec_ctx->height);

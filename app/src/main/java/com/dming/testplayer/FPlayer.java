@@ -131,11 +131,11 @@ public class FPlayer implements SurfaceHolder.Callback {
             mControlStatus.set(PlayStatus.IDLE);
             if (ret < 0) {
                 if (mErrorRunnable != null) {
-                    mErrorRunnable.run();
+                    mMainHandle.post(mErrorRunnable);
                 }
             } else {
                 if (mEndRunnable != null) {
-                    mEndRunnable.run();
+                    mMainHandle.post(mEndRunnable);
                 }
             }
         }

@@ -210,7 +210,8 @@ void clearAllList() {
     }
 }
 
-void seek_frame_if_need() {
+int seek_frame_if_need(AVCodecContext *video_dec_ctx, AVCodecContext *audio_dec_ctx) {
+    int ret = 0;
     pthread_mutex_lock(&c_mutex);
     if (want_seek) {
 //        LOGE("seek_frame_if_need---------------------------------------------->");
@@ -218,13 +219,21 @@ void seek_frame_if_need() {
         want_audio_seek_inner = true;
         want_video_seek_inner = true;
         pthread_mutex_lock(&seek_mutex);
+        avformat_flush(fmt_ctx);
+//        avcodec_flush_buffers(video_dec_ctx);
+//        if (audio_dec_ctx != NULL) {
+//            avcodec_flush_buffers(audio_dec_ctx);
+//        }
+//        | AVSEEK_FLAG_ANY
         if (av_seek_frame(fmt_ctx, AVMEDIA_TYPE_UNKNOWN, (int64_t) (seek_time),
-                          AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_ANY)) {
+                          AVSEEK_FLAG_BACKWARD)) {
             avformat_flush(fmt_ctx);
         }
         pthread_mutex_unlock(&seek_mutex);
+        ret = 1;
     }
     pthread_mutex_unlock(&c_mutex);
+    return ret;
 }
 
 void seek_frame(float percent) {
