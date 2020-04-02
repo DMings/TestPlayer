@@ -255,13 +255,13 @@ public class MainActivity extends AppCompatActivity {
                         @Override
                         public void run() {
                             mIsShowPlayUI = false;
+                            mTvSrc.setText(srcFile.getName());
                             setVisible();
                         }
                     }, new Runnable() {
                         @Override
                         public void run() {
                             mIsPlaying = true;
-                            mTvSrc.setText(srcFile.getName());
                             mPlayBtn.setImageResource(R.drawable.ic_button_pause);
                         }
                     }, new Runnable() {
