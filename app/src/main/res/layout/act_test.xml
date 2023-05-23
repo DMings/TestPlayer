@@ -47,7 +47,7 @@
                     android:textColor="#000"
                     android:text="00:00"/>
 
-            <android.support.v7.widget.AppCompatSeekBar
+            <androidx.appcompat.widget.AppCompatSeekBar
                     android:id="@+id/play_sb"
                     android:layout_gravity="center_vertical"
                     android:visibility="visible"

@@ -39,7 +39,7 @@ int32_t ff_sec_duration = 0; // 总时间
 int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                        AVFormatContext *fmt_ctx, enum AVMediaType type) {
     int ret, stream_index;
-    AVCodec *dec = NULL;
+    const AVCodec *dec = NULL;
     AVDictionary *opts = NULL;
     AVStream *st;
     ret = av_find_best_stream(fmt_ctx, type, -1, -1, NULL, 0);

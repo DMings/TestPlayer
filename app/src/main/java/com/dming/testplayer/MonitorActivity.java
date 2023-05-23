@@ -1,15 +1,15 @@
 package com.dming.testplayer;
 
-import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AppCompatActivity;
 import android.util.TypedValue;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
