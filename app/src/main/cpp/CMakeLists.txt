@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 3.22.1)
+cmake_minimum_required(VERSION 3.4.1)
+
+set(ffmepg_src ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
+#message("ffmepg_src:" ${ffmepg_src})
 
 add_library(
         fplayer
@@ -16,23 +19,20 @@ add_library(
         GLThread.cpp
         )
 find_library(log-lib log)
-set(ffmepgSrc ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI})
-add_library(avcodec STATIC IMPORTED)
-set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libavcodec.a)
-add_library(avformat STATIC IMPORTED)
-set_target_properties(avformat PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libavformat.a)
-add_library(avutil STATIC IMPORTED)
-set_target_properties(avutil PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libavutil.a)
-add_library(swresample STATIC IMPORTED)
-set_target_properties(swresample PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libswresample.a)
-add_library(swscale STATIC IMPORTED)
-set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libswscale.a)
-add_library(x264 STATIC IMPORTED)
-set_target_properties(x264 PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libx264.a)
-add_library(fdk-aac STATIC IMPORTED)
-set_target_properties(fdk-aac PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libfdk-aac.a)
+add_library(avcodec SHARED IMPORTED)
+set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavcodec.so)
+#add_library(avfilter SHARED IMPORTED)
+#set_target_properties(avfilter PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavfilter.so)
+add_library(avformat SHARED IMPORTED)
+set_target_properties(avformat PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavformat.so)
+add_library(avutil SHARED IMPORTED)
+set_target_properties(avutil PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libavutil.so)
+add_library(swresample SHARED IMPORTED)
+set_target_properties(swresample PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libswresample.so)
+add_library(swscale SHARED IMPORTED)
+set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${ffmepg_src}/libswscale.so)
 
-include_directories(${CMAKE_SOURCE_DIR}/libs/include/)
+include_directories(${CMAKE_SOURCE_DIR}/ffmpeg/)
 
 #如果当前系统版本过低设置拒绝编译
 #if (${ANDROID_PLATFORM_LEVEL} LESS 11)
@@ -47,16 +47,14 @@ include_directories(${CMAKE_SOURCE_DIR}/libs/include/)
 
 target_link_libraries(
         fplayer
+        swscale
         avformat
+        swresample
         avcodec
         avutil
-        swresample
-        swscale
-        x264
-        fdk-aac
+#        avfilter
         log
         android
         OpenSLES
         EGL
-        z
         ${OPENGL_LIB})

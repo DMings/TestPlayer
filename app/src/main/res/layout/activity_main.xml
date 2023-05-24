@@ -100,7 +100,7 @@
                 android:textColor="#fff"
                 android:text="00:00"/>
 
-            <androidx.appcompat.widget.AppCompatSeekBar
+            <android.support.v7.widget.AppCompatSeekBar
                 android:id="@+id/sb_play"
                 android:layout_gravity="center_vertical"
                 android:visibility="invisible"
