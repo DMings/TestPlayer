@@ -2,20 +2,13 @@ package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
-import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -23,7 +16,6 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.File;
-import java.util.ArrayList;
 
 /**
  * Created by DMing at 2017/12/21 0021
@@ -41,13 +33,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout mControlLL;
     private FrameLayout mTitleLayout;
     private Handler mHandler;
-    private boolean mIsSearch = false;
-    private ListView mDataLv;
-    private ArrayList<String> mFileList = new ArrayList<>();
     private String mFilePath;
-    private boolean mFileListShow;
-    private ProgressBar mSearchPb;
-    private FrameLayout mFileLayout;
     private long mSystemTime;
     private FPlayer mFPlayer;
     private boolean mIsSeeking = false;
@@ -59,9 +45,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        mDataLv = findViewById(R.id.lv_data);
-        mFileLayout = findViewById(R.id.fl_file);
-        mSearchPb = findViewById(R.id.pb_search);
         mTvSrc = findViewById(R.id.iiv_src_name);
         mPlaySv = findViewById(R.id.sv_play);
         mTitleLayout = findViewById(R.id.fl_title);
@@ -71,18 +54,6 @@ public class MainActivity extends AppCompatActivity {
         mPlaySeekBar = findViewById(R.id.sb_play);
         mControlLL = findViewById(R.id.ll_control);
         mHandler = new Handler(Looper.getMainLooper());
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.item_file_list, mFileList);
-        mDataLv.setAdapter(adapter);
-        mDataLv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                if (mFilePath != null && mFilePath.equals(mFileList.get(position))) {
-                    return;
-                }
-                mFilePath = mFileList.get(position);
-                playOrPause(true);
-            }
-        });
         mPlayBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -108,7 +79,6 @@ public class MainActivity extends AppCompatActivity {
                             mControlLL.setVisibility(View.VISIBLE);
                             mTvSrc.setVisibility(View.VISIBLE);
                             mTitleLayout.setVisibility(View.VISIBLE);
-                            mFileLayout.setVisibility(View.VISIBLE);
                         }
                     });
                 } else {
@@ -164,56 +134,10 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        findViewById(R.id.iv_file_list).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mFileLayout.setVisibility(View.VISIBLE);
-                mPlayBtn.setVisibility(View.GONE);
-                mFileListShow = true;
-                if (mFileList.size() > 0) {
-                    return;
-                }
-                mSearchPb.setVisibility(View.VISIBLE);
-                PermissionFragment.checkPermission(MainActivity.this, new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!mIsSearch) {
-                            mIsSearch = true;
-                            new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    mFPlayer.searchFile(Environment.getExternalStorageDirectory().toString(), new FileAction() {
-                                        @Override
-                                        public void update(final String fileName) {
-                                            DLog.i("update fileName: " + fileName);
-                                            mHandler.post(new Runnable() {
-                                                @Override
-                                                public void run() {
-                                                    mFileList.add(fileName);
-                                                    BaseAdapter baseAdapter = (BaseAdapter) mDataLv.getAdapter();
-                                                    baseAdapter.notifyDataSetChanged();
-                                                }
-                                            });
-                                        }
-                                    });
-                                    mHandler.post(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            mSearchPb.setVisibility(View.GONE);
-                                        }
-                                    });
-                                }
-                            }).start();
-                        }
-                    }
-                });
-            }
-        });
     }
 
     private void setVisible() {
-        mFileLayout.setVisibility(mFileListShow ? View.VISIBLE : View.GONE);
-        if (!mFileListShow) {
+        if (!false) {
             if (mIsShowPlayUI) {
                 mIsShowPlayUI = false;
                 mPlayBtn.setVisibility(View.GONE);
@@ -228,8 +152,6 @@ public class MainActivity extends AppCompatActivity {
                 mTitleLayout.setVisibility(View.VISIBLE);
             }
         } else {
-            mFileListShow = false;
-            mFileLayout.setVisibility(View.GONE);
             mPlayBtn.setVisibility(View.VISIBLE);
 //                    removeAndPost();
         }

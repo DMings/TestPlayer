@@ -40,40 +40,11 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="#fff"
-            android:text="无文件播放"
+            android:text="无播放"
             />
-
-        <ImageView
-            android:id="@+id/iv_file_list"
-            android:layout_gravity="end|bottom"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="7dp"
-            android:src="@drawable/ic_open"/>
 
     </FrameLayout>
 
-    <FrameLayout
-        android:id="@+id/fl_file"
-        android:layout_gravity="end"
-        android:layout_marginTop="45dp"
-        android:layout_marginBottom="40dp"
-        android:layout_width="250dp"
-        android:layout_height="match_parent"
-        android:background="#55333333"
-        android:visibility="gone">
-        <ProgressBar
-            android:id="@+id/pb_search"
-            android:layout_gravity="center"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            />
-        <ListView
-            android:id="@+id/lv_data"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            />
-    </FrameLayout>
     <LinearLayout
         android:id="@+id/ll_control"
         android:layout_gravity="bottom"

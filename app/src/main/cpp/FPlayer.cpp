@@ -262,14 +262,6 @@ jlong get_duration_time_jni(JNIEnv *env, jclass type) {
     return get_duration_time();
 }
 
-void scan_file_jni(JNIEnv *env, jclass type, jstring file_path_, jobject fa_obj) {
-    const char *path = env->GetStringUTFChars(file_path_, 0);
-    jclass fileAction = env->GetObjectClass(fa_obj);
-    jmethodID updateFile = env->GetMethodID(fileAction, "update", "(Ljava/lang/String;)V");
-    scan_file(env, fa_obj, updateFile, path);
-    env->ReleaseStringUTFChars(file_path_, path);
-}
-
 jint get_play_state_jni(JNIEnv *env, jclass type) {
     int state;
     pthread_mutex_lock(&play_mutex);
@@ -292,7 +284,6 @@ JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;IILcom/dmi
                             {"release",           "()V",                                                              (void *) release_jni},
                             {"get_current_time",  "()J",                                                              (void *) get_current_time_jni},
                             {"get_duration_time", "()J",                                                              (void *) get_duration_time_jni},
-                            {"scan_file",         "(Ljava/lang/String;Lcom/dming/testplayer/FileAction;)V",           (void *) scan_file_jni},
                             {"get_play_state",    "()I",                                                              (void *) get_play_state_jni},
 };
 

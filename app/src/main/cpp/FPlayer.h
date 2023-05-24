@@ -7,8 +7,5 @@
 
 #include "Audio.h"
 #include "Video.h"
-#include "SearchFile.h"
-
-extern void scan_file(JNIEnv *env,jobject dnPlayer,jmethodID updateFile, const char* path);
 
 #endif //TESTPLAYER_FFUTILS_H

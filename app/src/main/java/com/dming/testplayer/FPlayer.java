@@ -58,10 +58,6 @@ public class FPlayer implements SurfaceHolder.Callback {
         }
     }
 
-    public void searchFile(String path, FileAction fileAction) {
-        scan_file(path, fileAction);
-    }
-
     public void seekTime(float percent) {
         seek(percent);
     }
@@ -184,7 +180,5 @@ public class FPlayer implements SurfaceHolder.Callback {
     private static native void surface_destroyed();
 
     private static native void release();
-
-    private static native void scan_file(String path, FileAction fileAction);
 
 }

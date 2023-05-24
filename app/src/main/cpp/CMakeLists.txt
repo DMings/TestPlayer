@@ -11,9 +11,9 @@ add_library(
         Audio.cpp
         Video.cpp
         FPlayer.cpp
-        SearchFile.cpp
         PthreadSleep.cpp
         GLThread.cpp
+        AudioSpeed.cpp
         )
 find_library(log-lib log)
 set(ffmepgSrc ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI})
@@ -31,6 +31,8 @@ add_library(x264 STATIC IMPORTED)
 set_target_properties(x264 PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libx264.a)
 add_library(fdk-aac STATIC IMPORTED)
 set_target_properties(fdk-aac PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libfdk-aac.a)
+add_library(soundtouch STATIC IMPORTED)
+set_target_properties(soundtouch PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libsoundtouch.a)
 
 include_directories(${CMAKE_SOURCE_DIR}/libs/include/)
 
@@ -52,6 +54,7 @@ target_link_libraries(
         avutil
         swresample
         swscale
+        soundtouch
         x264
         fdk-aac
         log
