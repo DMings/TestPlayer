@@ -7,9 +7,9 @@ import android.util.Log;
  * Created by DMing on 2017/9/19.
  */
 
-public class DLog {
+public class FLog {
 
-    private static String TAG = "DMUI";
+    private static String TAG = "DMFF";
 
     public static void i(String msg){
         if (BuildConfig.DEBUG) Log.i(TAG,msg);

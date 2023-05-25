@@ -2,6 +2,7 @@ package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.SurfaceView;
@@ -54,11 +55,16 @@ public class MainActivity extends AppCompatActivity {
         mPlaySeekBar = findViewById(R.id.sb_play);
         mControlLL = findViewById(R.id.ll_control);
         mHandler = new Handler(Looper.getMainLooper());
+
+        File file = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "degree.mp4");
+        mFilePath = file.getPath();
+        FLog.i("file: " + file.getPath() + " exists: " + file.exists() + " canRead: " + file.canRead());
+
         mPlayBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (mFilePath == null) {
-                    Toast.makeText(MainActivity.this, "当前无视频文件可播放", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "当前无视频可播放", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 playOrPause(false);
@@ -174,7 +180,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     final File srcFile = new File(mFilePath);
                     mPlaySv.setVisibility(View.VISIBLE);
-                    int ret = mFPlayer.play(srcFile.toString(), new Runnable() {
+                    int ret = mFPlayer.play("rtmp://43.138.249.153:1935/live/livestream", new Runnable() {
                         @Override
                         public void run() {
                             mIsShowPlayUI = false;
@@ -193,7 +199,7 @@ public class MainActivity extends AppCompatActivity {
                             Toast.makeText(MainActivity.this, "视频播放失败", Toast.LENGTH_SHORT).show();
                         }
                     });
-                    DLog.i("ret=" + ret);
+                    FLog.i("ret=" + ret);
                     if (ret != FPlayer.PlayStatus.IDLE) {
 //                        if (ret == FPlayer.PlayStatus.PLAYING) {
 //                            Toast.makeText(MainActivity.this, "视频切换中", Toast.LENGTH_SHORT).show();

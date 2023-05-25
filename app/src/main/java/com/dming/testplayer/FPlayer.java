@@ -80,7 +80,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         try {
             mPlayThread.join();
         } catch (InterruptedException e) {
-            DLog.e("Join encountered an error!");
+            FLog.e("Join encountered an error!");
         }
     }
 
@@ -123,7 +123,7 @@ public class FPlayer implements SurfaceHolder.Callback {
                     }
                 }
             });
-            DLog.i("PlayStatus.IDLE");
+            FLog.i("PlayStatus.IDLE");
             mControlStatus.set(PlayStatus.IDLE);
             if (ret < 0) {
                 if (mErrorRunnable != null) {
