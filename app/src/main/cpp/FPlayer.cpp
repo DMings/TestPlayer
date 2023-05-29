@@ -83,6 +83,7 @@ int start_player(const char *src_filename,
         pthread_mutex_unlock(&play_mutex);
         return -1;
     }
+    LOGE("avformat_find_stream_info...");
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         LOGE("Could not find stream information");
         pthread_mutex_lock(&play_mutex);
@@ -108,8 +109,6 @@ int start_player(const char *src_filename,
         pthread_mutex_lock(&play_mutex);
         play_status = PLAYING;
         pthread_mutex_unlock(&play_mutex);
-        pkt->data = NULL;
-        pkt->size = 0;
         do {
             pthread_mutex_lock(&c_mutex);
             cr = crash_error;
@@ -120,7 +119,15 @@ int start_player(const char *src_filename,
             }
             ret = seek_frame_if_need();
             ret = av_read_frame(fmt_ctx, pkt);
+            if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
+                if (pkt->stream_index == video->stream_id) {
+                    pkt->time_base = video->av_stream->time_base;
+                } else {
+                    pkt->time_base = audio->av_stream->time_base;
+                }
+            }
             decode_packet(pkt, audio->stream_id, video->stream_id);
+            av_packet_unref(pkt);
         } while (ret >= 0);
         LOGI("Demuxing succeeded.");
     } else {

@@ -19,8 +19,6 @@ Clock master_clk = {0};
 Clock video_clk = {0};
 Clock audio_clk = {0};
 
-FPacket *copy_pkg = NULL;
-
 bool audio_seeking = false;
 bool video_seeking = false;
 bool want_seek = false;
@@ -129,57 +127,62 @@ void set_audio_clock(double pts) {
 }
 
 void decode_packet(AVPacket *pkt, int audio_stream_id, int video_stream_id) {
-//    LOGE("seek_frame111");
     if (pkt->stream_index == video_stream_id || pkt->stream_index == audio_stream_id) {
-        AVPacket *pkg = av_packet_clone(pkt);
-        FPacket *fPacket = alloc_packet();
+        if (pkt->stream_index == video_stream_id) {
+            LOGI("video pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index, pkt->pts,
+                 av_rescale_q(pkt->pts, AV_TIME_BASE_Q, pkt->time_base));
+        } else {
+            LOGI("audio pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index, pkt->pts,
+                 av_rescale_q(pkt->pts, AV_TIME_BASE_Q, pkt->time_base));
+        }
+        return;
+    }
+
+
+    FPacket *f_pkt = nullptr;
+    if (pkt->stream_index == video_stream_id || pkt->stream_index == audio_stream_id) {
+        AVPacket *pkg = av_packet_alloc();
+        av_packet_move_ref(pkg, pkt);
+        f_pkt = alloc_packet();
         pthread_mutex_lock(&c_mutex);
-        fPacket->avPacket = pkg;
-        copy_pkg = fPacket;
+        f_pkt->avPacket = pkg;
         if (want_audio_seek_inner && pkt->stream_index == audio_stream_id) { //
             want_audio_seek_inner = false;
-            copy_pkg->checkout_time = true;
+            f_pkt->checkout_time = true;
         } else if (want_video_seek_inner && pkt->stream_index == video_stream_id) { //
             want_video_seek_inner = false;
-            copy_pkg->checkout_time = true;
+            f_pkt->checkout_time = true;
             if (audio_stream_id == -1) {
                 audio_seeking = false;
             }
         }
         pthread_mutex_unlock(&c_mutex);
     }
+    if (f_pkt == nullptr) {
+        return;
+    }
 //    LOGE("seek_frame222 audio: %d video: %d copy_pkg:%d",(pkt->stream_index == audio_stream_id),(pkt->stream_index == video_stream_id),copy_pkg);
     pthread_mutex_lock(&c_mutex);
-    if (want_seek) {
-        if (copy_pkg) {
-            av_packet_free(&copy_pkg->avPacket);
-            free_packet(copy_pkg);
-            copy_pkg = NULL;
-        }
+    //
+    if (pkt->stream_index == video_stream_id) {
+        video_pkt_list.push_back(f_pkt);
+        pthread_cond_signal(&video_cond); // 谁的数据通知谁
+    } else if (pkt->stream_index == audio_stream_id) {
+        audio_pkt_list.push_back(f_pkt);
+        pthread_cond_signal(&audio_cond);
     }
-    if (copy_pkg != NULL) {
-        //
-        if (pkt->stream_index == video_stream_id) {
-            video_pkt_list.push_back(copy_pkg);
-            pthread_cond_signal(&video_cond); // 谁的数据通知谁
-        } else if (pkt->stream_index == audio_stream_id) {
-            audio_pkt_list.push_back(copy_pkg);
-            pthread_cond_signal(&audio_cond);
+    //
+    if (video_stream_id != -1 && audio_stream_id != -1) {
+        if (video_pkt_list.size() >= 200 && audio_pkt_list.size() >= 200) {
+            pthread_cond_wait(&c_cond, &c_mutex);
         }
-        copy_pkg = NULL;
-        //
-        if (video_stream_id != -1 && audio_stream_id != -1) {
-            if (video_pkt_list.size() >= 2 && audio_pkt_list.size() >= 1) {
-                pthread_cond_wait(&c_cond, &c_mutex);
-            }
-        } else if (video_stream_id != -1) {
-            if (video_pkt_list.size() >= 2) {
-                pthread_cond_wait(&c_cond, &c_mutex);
-            }
-        } else if (audio_stream_id != -1) {
-            if (audio_pkt_list.size() >= 1) {
-                pthread_cond_wait(&c_cond, &c_mutex);
-            }
+    } else if (video_stream_id != -1) {
+        if (video_pkt_list.size() >= 200) {
+            pthread_cond_wait(&c_cond, &c_mutex);
+        }
+    } else if (audio_stream_id != -1) {
+        if (audio_pkt_list.size() >= 200) {
+            pthread_cond_wait(&c_cond, &c_mutex);
         }
     }
     pthread_mutex_unlock(&c_mutex);
@@ -214,6 +217,7 @@ int seek_frame_if_need() {
     int ret = 0;
     pthread_mutex_lock(&c_mutex);
     if (want_seek) {
+        clearAllList();
 //        LOGE("seek_frame_if_need---------------------------------------------->");
         want_seek = false;
         want_audio_seek_inner = true;
@@ -244,7 +248,6 @@ void seek_frame(float percent) {
     pthread_mutex_lock(&c_mutex);
 //    LOGI("seek_frame------------------------------------>v %d a %d", video_seeking, audio_seeking);
     want_seek = true;
-    clearAllList();
     seek_time = percent * fmt_ctx->duration;
     pthread_mutex_unlock(&c_mutex);
 }
@@ -256,11 +259,7 @@ void ff_init() {
 }
 
 void ff_release() {
-    if (copy_pkg) {
-        av_packet_free(&copy_pkg->avPacket);
-        free_packet(copy_pkg);
-        copy_pkg = NULL;
-    }
+    clearAllList();
     fmt_ctx = NULL;
     pthread_mutex_destroy(&seek_mutex);
     pthread_cond_destroy(&c_cond);

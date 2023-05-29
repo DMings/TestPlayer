@@ -31,8 +31,9 @@ public:
     int view_height = 0;
 
     AVCodecContext *av_dec_ctx = NULL;
-private:
+
     AVStream *av_stream = NULL;
+private:
     SwsContext *sws_context = NULL;
     GLThread* glThread;
     uint8_t *dst_data[4];
