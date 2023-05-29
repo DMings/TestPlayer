@@ -111,7 +111,7 @@ SLuint32 OpenSL::getSupportSampleRate(int sample_rate) {
 
 int OpenSL::createPlayer(SLConfigure *sLConfigure) {
     this->slConfigure = sLConfigure;
-    LOGI("sampleRate: %d, channels: %d", sLConfigure->sampleRate, sLConfigure->channels)
+    LOGI("sampleRate: %d, channels: %d", sLConfigure->sampleRate, sLConfigure->channels);
     int speakers;
     if (sLConfigure->channels > 1)
         speakers = SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT;
@@ -168,17 +168,17 @@ int OpenSL::createPlayer(SLConfigure *sLConfigure) {
 
     const SLInterfaceID pIds[] = {SL_IID_BUFFERQUEUE, SL_IID_VOLUME};
     const SLboolean pReq[] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
-    LOGI("CreateAudioPlayer ")
+    LOGI("CreateAudioPlayer ");
     //创建播放器
     (*engineEngine)->CreateAudioPlayer(engineEngine, &bqPlayerObject, &slDataSource,
                                        &audioSnk, 2,
                                        pIds, pReq);
-    LOGI("CreateAudioPlayer Realize")
+    LOGI("CreateAudioPlayer Realize");
     //初始化播放器
     (*bqPlayerObject)->Realize(bqPlayerObject, SL_BOOLEAN_FALSE);
     //得到接口后调用  获取Player接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_PLAY, &bqPlayerPlay);
-    LOGI("CreateAudioPlayer bqPlayerObject")
+    LOGI("CreateAudioPlayer bqPlayerObject");
     //-------------------------------------------
     //注册回调缓冲区 //获取缓冲队列接口
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_BUFFERQUEUE, &bqPlayerBufferQueue);
@@ -188,7 +188,7 @@ int OpenSL::createPlayer(SLConfigure *sLConfigure) {
     (*bqPlayerObject)->GetInterface(bqPlayerObject, SL_IID_VOLUME, &bqPlayerVolume);
     SLmillibel pMaxLevel;
     (*bqPlayerVolume)->GetMaxVolumeLevel(bqPlayerVolume, &pMaxLevel);
-    LOGI("pMaxLevel: %d", pMaxLevel)
+    LOGI("pMaxLevel: %d", pMaxLevel);
     (*bqPlayerVolume)->SetVolumeLevel(bqPlayerVolume, pMaxLevel);
     return 0;
 }

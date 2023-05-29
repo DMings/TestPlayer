@@ -4,6 +4,9 @@
 
 #include <unistd.h>
 #include "FPlayer.h"
+extern "C"{
+#include "libavcodec/jni.h"
+}
 
 enum PlayStatus {
     IDLE, PREPARE, PLAYING, STOPPING,
@@ -75,6 +78,8 @@ int start_player(const char *src_filename,
     //
     video->view_width = width;
     video->view_height = height;
+    auto protocolName = avio_find_protocol_name(src_filename);
+    LOGI("protocolName: %s", protocolName);
     LOGI("avformat_open_input %s", src_filename);
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
         LOGE("Could not open source file %s", src_filename);
@@ -96,7 +101,7 @@ int start_player(const char *src_filename,
     //
     ff_init();
     // ->>
-    LOGI("fmt_ctx->duration %lld", fmt_ctx->duration)
+    LOGI("fmt_ctx->duration %lld", fmt_ctx->duration);
     ff_sec_duration = (int32_t) ((fmt_ctx->duration + AV_TIME_BASE / 2) / AV_TIME_BASE); //ms
     if (ff_sec_duration <= 0) {
         ff_sec_duration = 1; //ms
@@ -150,7 +155,7 @@ int start_player(const char *src_filename,
     av_packet_free(&pkt);
     avformat_close_input(&fmt_ctx);
     ff_release();
-    LOGI("avformat_close_input")
+    LOGI("avformat_close_input");
     pthread_mutex_lock(&play_mutex);
     play_status = IDLE;
     pthread_mutex_unlock(&play_mutex);
@@ -308,10 +313,41 @@ jint unRegisterNativeMethod(JNIEnv *env) {
     return 0;
 }
 
+static char buffer[1024];
+pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void syslog_print(void *ptr, int level, const char *fmt, va_list vl) {
+//    lock.lock();
+    pthread_mutex_lock(&log_lock);
+    memset(buffer, 0, 1024);
+    vsprintf(buffer, fmt, vl);
+    switch (level) {
+        case AV_LOG_DEBUG:
+            LOGD("FFmpeg: %s", buffer);
+            break;
+        case AV_LOG_VERBOSE:
+            LOGV("FFmpeg: %s", buffer);
+            break;
+        case AV_LOG_INFO:
+            LOGI("FFmpeg: %s", buffer);
+            break;
+        case AV_LOG_WARNING:
+            LOGW("FFmpeg: %s", buffer);
+            break;
+        case AV_LOG_ERROR:
+            LOGE("FFmpeg: %s", buffer);
+            break;
+    }
+    pthread_mutex_unlock(&log_lock);
+}
+
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     native_jvm = vm;
     LOGI("JNI_OnLoad");
     JNIEnv *env;
+    av_jni_set_java_vm(vm, nullptr);
+    av_log_set_level(AV_LOG_INFO);
+    av_log_set_callback(syslog_print);
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         registerNativeMethod(env);
         return JNI_VERSION_1_6;

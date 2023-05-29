@@ -84,13 +84,13 @@ GLuint GLUtils::createProgram(const char *vtxSrc, const char *fragSrc) {
 void GLUtils::checkErr() {
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
-        LOGE("gl get Error: %d", err)
+        LOGE("gl get Error: %d", err);
     }
 }
 
 void GLUtils::checkErr(const char *tagName) {
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
-        LOGE("gl %s get Error: %d", tagName,err)
+        LOGE("gl %s get Error: %d", tagName,err);
     }
 }

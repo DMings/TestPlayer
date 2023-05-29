@@ -40,7 +40,7 @@ void *GLThread::glProcess(void *arg) {
                 if (glThread->data != NULL) {
                     glThread->openGL.draw(glThread->data);
                 } else {
-                    LOGI("GLThread::DRAW: %p", glThread->data)
+                    LOGI("GLThread::DRAW: %p", glThread->data);
                 }
             } else if (command == GLThread::CLEAN_DRAW) {
                 glThread->openGL.drawBackground();
@@ -109,7 +109,7 @@ void GLThread::setParams(uint8_t *data, int tex_width, int tex_height) {
     this->data = data;
     this->tex_width = tex_width;
     this->tex_height = tex_height;
-    LOGI("setParams: %p", this->data)
+    LOGI("setParams: %p", this->data);
     if (!this->gl_finish && this->data != NULL) {
         this->command_list.push_back(GLThread::CHANGE_SIZE);
     }

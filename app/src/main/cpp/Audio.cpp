@@ -9,7 +9,7 @@ pthread_mutex_t Audio::a_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t Audio::a_cond = PTHREAD_COND_INITIALIZER;
 
 Audio::Audio(UpdateTimeFun *fun) {
-    LOGI("Audio must_feed: %d ", must_feed)
+    LOGI("Audio must_feed: %d ", must_feed);
     must_feed = 0;
     updateTimeFun = fun;
 }
@@ -89,7 +89,7 @@ void *Audio::audioProcess(void *arg) {
     if (audio->updateTimeFun) {
         audio->updateTimeFun->jvm_attach_fun();
     }
-    LOGI("audioProcess: run!!!")
+    LOGI("audioProcess: run!!!");
     while (true) {
         do {
 //            LOGI("audio_pkt_list size: %d", audio_pkt_list.size())
@@ -105,7 +105,7 @@ void *Audio::audioProcess(void *arg) {
                     pthread_cond_broadcast(&c_cond);
                     pthread_cond_wait(&audio_cond, &c_mutex);
                 } else {
-                    LOGI("audioProcess: end")
+                    LOGI("audioProcess: end");
                     pthread_mutex_unlock(&c_mutex);
                     goto end; // 线程不再运行，结束
                 }
@@ -114,7 +114,7 @@ void *Audio::audioProcess(void *arg) {
                     audio_pkt_list.pop_front();
                 } else {
                     if (audio->thread_finish) {
-                        LOGI("audioProcess: end")
+                        LOGI("audioProcess: end");
                         pthread_mutex_unlock(&c_mutex);
                         goto end;// 线程不再运行，结束
                     }
@@ -248,7 +248,7 @@ void *Audio::audioProcess(void *arg) {
         audio->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
-    LOGI("audioProcess end audio_pkt_list size: %d", audio_pkt_list.size())
+    LOGI("audioProcess end audio_pkt_list size: %d", audio_pkt_list.size());
     return 0;
 }
 
@@ -320,12 +320,12 @@ void Audio::pause() {
 }
 
 void Audio::resume() {
-    LOGI("Audio resume start")
+    LOGI("Audio resume start");
     pthread_mutex_lock(&pause_mutex);
     is_pause = false;
     pthread_cond_signal(&pause_cond);
     pthread_mutex_unlock(&pause_mutex);
-    LOGI("Audio resume end")
+    LOGI("Audio resume end");
 }
 
 void Audio::release() {

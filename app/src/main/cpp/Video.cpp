@@ -79,7 +79,7 @@ void *Video::videoProcess(void *arg) {
     if (!video->has_audio && video->updateTimeFun) {
         video->updateTimeFun->jvm_attach_fun();
     }
-    LOGI("videoProcess: run!!!")
+    LOGI("videoProcess: run!!!");
     pthread_sleep.reset();
     while (true) {
         do {
@@ -215,7 +215,7 @@ void *Video::videoProcess(void *arg) {
         video->updateTimeFun->jvm_detach_fun();
     }
     av_frame_free(&frame);
-    LOGI("videoProcess end video_pkt_list size: %d", video_pkt_list.size())
+    LOGI("videoProcess end video_pkt_list size: %d", video_pkt_list.size());
     return 0;
 }
 
@@ -267,12 +267,12 @@ void Video::pause() {
 }
 
 void Video::resume() {
-    LOGI("Video resume start")
+    LOGI("Video resume start");
     pthread_mutex_lock(&pause_mutex);
     is_pause = false;
     pthread_cond_signal(&pause_cond);
     pthread_mutex_unlock(&pause_mutex);
-    LOGI("Video resume end")
+    LOGI("Video resume end");
 }
 
 void Video::release() {
