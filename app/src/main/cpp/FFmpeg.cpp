@@ -129,13 +129,18 @@ void set_audio_clock(double pts) {
 void decode_packet(AVPacket *pkt, int audio_stream_id, int video_stream_id) {
     if (pkt->stream_index == video_stream_id || pkt->stream_index == audio_stream_id) {
         if (pkt->stream_index == video_stream_id) {
-            LOGI("video pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index, pkt->pts,
-                 av_rescale_q(pkt->pts, AV_TIME_BASE_Q, pkt->time_base));
+            if (pkt->flags == AV_PKT_FLAG_KEY) {
+                LOGE("video key pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index, pkt->pts,
+                     av_rescale_q(pkt->pts, pkt->time_base, AV_TIME_BASE_Q));
+            } else {
+                LOGI("video pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index, pkt->pts,
+                     av_rescale_q(pkt->pts, pkt->time_base, AV_TIME_BASE_Q));
+            }
         } else {
             LOGI("audio pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index, pkt->pts,
-                 av_rescale_q(pkt->pts, AV_TIME_BASE_Q, pkt->time_base));
+                 av_rescale_q(pkt->pts, pkt->time_base, AV_TIME_BASE_Q));
         }
-        return;
+//        return;
     }
 
 
@@ -164,10 +169,12 @@ void decode_packet(AVPacket *pkt, int audio_stream_id, int video_stream_id) {
 //    LOGE("seek_frame222 audio: %d video: %d copy_pkg:%d",(pkt->stream_index == audio_stream_id),(pkt->stream_index == video_stream_id),copy_pkg);
     pthread_mutex_lock(&c_mutex);
     //
-    if (pkt->stream_index == video_stream_id) {
+    if (f_pkt->avPacket->stream_index == video_stream_id) {
+        LOGI("video_pkt_list push_back");
         video_pkt_list.push_back(f_pkt);
         pthread_cond_signal(&video_cond); // 谁的数据通知谁
-    } else if (pkt->stream_index == audio_stream_id) {
+    } else if (f_pkt->avPacket->stream_index == audio_stream_id) {
+        LOGI("audio_pkt_list push_back");
         audio_pkt_list.push_back(f_pkt);
         pthread_cond_signal(&audio_cond);
     }

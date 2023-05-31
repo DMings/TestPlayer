@@ -179,7 +179,7 @@ void *Audio::audioProcess(void *arg) {
             }
 
 
-//            LOGI("audio pts: %f cast time: %f", pts, ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
+            LOGI("audio pts: %f get_master_clock: %f", pts, get_master_clock());
 //            audio->test_audio_time = (av_gettime_relative() / 1000.0);
 
             ff_sec_time = (int32_t) (pts / 1000);

@@ -4,7 +4,8 @@
 
 #include <unistd.h>
 #include "FPlayer.h"
-extern "C"{
+
+extern "C" {
 #include "libavcodec/jni.h"
 }
 
@@ -81,21 +82,35 @@ int start_player(const char *src_filename,
     auto protocolName = avio_find_protocol_name(src_filename);
     LOGI("protocolName: %s", protocolName);
     LOGI("avformat_open_input %s", src_filename);
-    if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
+    const AVInputFormat *fmt = av_find_input_format("flv");
+    int64_t timeMs = av_gettime_relative() / 1000;
+    AVDictionary *dic = nullptr;
+    av_dict_set_int(&dic, "tcp_nodelay", 1, 0);
+//    av_dict_set_int(&dic, "timeout", 3, 0);
+    av_dict_set_int(&dic, "rtmp_buffer", 2000, 0);
+
+    av_dict_set_int(&dic, "analyzeduration", 0, 0);
+    av_dict_set_int(&dic, "fpsprobesize", 0, 0);
+
+    if (avformat_open_input(&fmt_ctx, src_filename, fmt, &dic) < 0) {
         LOGE("Could not open source file %s", src_filename);
         pthread_mutex_lock(&play_mutex);
         play_status = IDLE;
         pthread_mutex_unlock(&play_mutex);
         return -1;
     }
-    LOGE("avformat_find_stream_info...");
-    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+    LOGE("avformat_open_input... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
+    timeMs = av_gettime_relative() / 1000;
+
+    AVDictionary *find_dic = nullptr;
+    if (avformat_find_stream_info(fmt_ctx, &find_dic) < 0) {
         LOGE("Could not find stream information");
         pthread_mutex_lock(&play_mutex);
         play_status = IDLE;
         pthread_mutex_unlock(&play_mutex);
         return -2;
     }
+    LOGE("avformat_find_stream_info... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
     pthread_mutex_init(&c_mutex, NULL);
     pthread_cond_init(&c_cond, NULL);
     //
@@ -134,11 +149,11 @@ int start_player(const char *src_filename,
             decode_packet(pkt, audio->stream_id, video->stream_id);
             av_packet_unref(pkt);
         } while (ret >= 0);
-        LOGI("Demuxing succeeded.");
     } else {
         LOGE("Could not find audio or video stream in the input, aborting");
         ret_play = -8;
     }
+    usleep(2000000);
     pthread_mutex_lock(&play_mutex);
     play_status = STOPPING;
     LOGE("release play_status: %d", play_status);

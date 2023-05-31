@@ -160,6 +160,7 @@ void *Video::videoProcess(void *arg) {
                 }
                 pthread_mutex_unlock(&seek_mutex);
             }
+            LOGI("video pts: %f get_master_clock: %f", pts, get_master_clock());
 //            LOGI("video pts: %f get_master_clock: %f", pts, get_master_clock());
             if (video_seeking) {
 //                LOGE("check_video_is_seek copy_pkg:%p", video_packet);
