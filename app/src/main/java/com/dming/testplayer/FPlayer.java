@@ -58,10 +58,6 @@ public class FPlayer implements SurfaceHolder.Callback {
         }
     }
 
-    public void seekTime(float percent) {
-        seek(percent);
-    }
-
     public void onResume() {
         resume();
     }
@@ -161,11 +157,7 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     private static native int play(String path, int width, int height, OnProgressListener onProgressListener);
 
-    private static native void seek(float percent);
-
     private static native long get_current_time();
-
-    private static native long get_duration_time();
 
     private static native void pause();
 

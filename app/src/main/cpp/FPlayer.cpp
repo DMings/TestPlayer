@@ -15,43 +15,13 @@ enum PlayStatus {
 PlayStatus play_status = IDLE;
 pthread_mutex_t play_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-Video *video = NULL;
-Audio *audio = NULL;
-JavaVM *native_jvm = NULL;
-JNIEnv *native_env = NULL;
-jobject progress_obj = NULL;
-jmethodID on_progress = NULL;
+Video *video = nullptr;
+Audio *audio = nullptr;
 GLThread glThread;
-
-void jvm_attach_fun() {
-    native_env = NULL;
-    native_jvm->AttachCurrentThread(&native_env, NULL);
-}
-
-void update_time_fun() {
-    pthread_mutex_lock(&seek_mutex);
-    if (!video_seeking && !audio_seeking) {
-        native_env->CallVoidMethod(progress_obj, on_progress, ff_sec_time, ff_sec_duration);
-    }
-    pthread_mutex_unlock(&seek_mutex);
-}
-
-void jvm_detach_fun() {
-    native_env->DeleteGlobalRef(progress_obj);
-    native_jvm->DetachCurrentThread();
-    progress_obj = NULL;
-    native_env = NULL;
-}
-
-void update_java_time_init(JNIEnv *env, jobject onProgressListener, jmethodID onProgress) {
-    progress_obj = env->NewGlobalRef(onProgressListener);
-    on_progress = onProgress;
-}
 
 void refresh_finish(JNIEnv *env, jobject p_obj, jmethodID progress) {
     ff_sec_time = 0;
-    ff_sec_duration = 0;
-    env->CallVoidMethod(p_obj, progress, -1, ff_sec_duration);
+    env->CallVoidMethod(p_obj, progress, -1, -1);
 }
 
 int start_player(const char *src_filename,
@@ -59,7 +29,6 @@ int start_player(const char *src_filename,
                  JNIEnv *env, jobject progressObj, jmethodID onProgress) {
     int ret_play = 0;
     int ret = 0;
-    bool cr;
     bool p;
     pthread_mutex_lock(&play_mutex);
     p = play_status != IDLE;
@@ -68,13 +37,8 @@ int start_player(const char *src_filename,
     if (p) {
         return -3;
     }
-    update_java_time_init(env, progressObj, onProgress);
-    UpdateTimeFun updateTimeFun;
-    updateTimeFun.jvm_attach_fun = jvm_attach_fun;
-    updateTimeFun.update_time_fun = update_time_fun;
-    updateTimeFun.jvm_detach_fun = jvm_detach_fun;
-    video = new Video(&glThread, &updateTimeFun);
-    audio = new Audio(&updateTimeFun);
+    video = new Video(&glThread);
+    audio = new Audio();
     AVPacket *pkt = av_packet_alloc();
     //
     video->view_width = width;
@@ -111,49 +75,30 @@ int start_player(const char *src_filename,
         return -2;
     }
     LOGE("avformat_find_stream_info... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
-    pthread_mutex_init(&c_mutex, NULL);
-    pthread_cond_init(&c_cond, NULL);
+    pthread_mutex_init(&c_mutex, nullptr);
+    pthread_cond_init(&c_cond, nullptr);
     //
     ff_init();
     // ->>
     LOGI("fmt_ctx->duration %lld", fmt_ctx->duration);
-    ff_sec_duration = (int32_t) ((fmt_ctx->duration + AV_TIME_BASE / 2) / AV_TIME_BASE); //ms
-    if (ff_sec_duration <= 0) {
-        ff_sec_duration = 1; //ms
-    }
-    int audio_ret = audio->open_stream();
-//    int audio_ret = -1;
-    int video_ret = video->open_stream(audio_ret >= 0);
-//    int video_ret = 1;
-    if (video_ret >= 0 || audio_ret >= 0) {
-        pthread_mutex_lock(&play_mutex);
-        play_status = PLAYING;
-        pthread_mutex_unlock(&play_mutex);
-        do {
-            pthread_mutex_lock(&c_mutex);
-            cr = crash_error;
-            pthread_mutex_unlock(&c_mutex);
-            if (cr) {
-                clearAllList();
-                break;
+
+    audio->open_stream();
+    video->open_stream();
+    pthread_mutex_lock(&play_mutex);
+    play_status = PLAYING;
+    pthread_mutex_unlock(&play_mutex);
+    do {
+        ret = av_read_frame(fmt_ctx, pkt);
+        if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
+            if (pkt->stream_index == video->stream_id) {
+                pkt->time_base = video->av_stream->time_base;
+            } else {
+                pkt->time_base = audio->av_stream->time_base;
             }
-            ret = seek_frame_if_need();
-            ret = av_read_frame(fmt_ctx, pkt);
-            if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
-                if (pkt->stream_index == video->stream_id) {
-                    pkt->time_base = video->av_stream->time_base;
-                } else {
-                    pkt->time_base = audio->av_stream->time_base;
-                }
-            }
-            decode_packet(pkt, audio->stream_id, video->stream_id);
-            av_packet_unref(pkt);
-        } while (ret >= 0);
-    } else {
-        LOGE("Could not find audio or video stream in the input, aborting");
-        ret_play = -8;
-    }
-    usleep(2000000);
+        }
+        decode_packet(pkt, audio->stream_id, video->stream_id);
+        av_packet_unref(pkt);
+    } while (ret >= 0);
     pthread_mutex_lock(&play_mutex);
     play_status = STOPPING;
     LOGE("release play_status: %d", play_status);
@@ -162,8 +107,8 @@ int start_player(const char *src_filename,
     video->release();
     delete audio;
     delete video;
-    audio = NULL;
-    video = NULL;
+    audio = nullptr;
+    video = nullptr;
     LOGI("audio.release()  video.release()");
     refresh_finish(env, progressObj, onProgress);
     avformat_flush(fmt_ctx);
@@ -177,17 +122,12 @@ int start_player(const char *src_filename,
     return ret_play;
 }
 
-void f_seek(float percent) {
-    pthread_mutex_lock(&play_mutex);
-    if (play_status == PLAYING) {
-        seek_frame(percent);
-    }
-    pthread_mutex_unlock(&play_mutex);
-}
-
 void f_pause() {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
+        if (fmt_ctx) {
+            av_read_pause(fmt_ctx);
+        }
         if (video && video->stream_id != -1) {
             video->pause();
         }
@@ -201,6 +141,9 @@ void f_pause() {
 void f_resume() {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
+        if (fmt_ctx) {
+            av_read_play(fmt_ctx);
+        }
         if (video && video->stream_id != -1) {
             video->resume();
         }
@@ -215,44 +158,30 @@ void f_release() {
     pthread_mutex_lock(&play_mutex);
     LOGE("play_status: %d", play_status);
     if (play_status != IDLE && play_status != STOPPING) {
-        if (!crash_error && (audio->stream_id != -1 || video->stream_id != -1)) {
-            if (video && video->stream_id != -1) {
-                video->resume();
-            }
-            if (audio && audio->stream_id != -1) {
-                audio->resume();
-            }
-            pthread_mutex_lock(&c_mutex);
-            crash_error = true;
-            pthread_mutex_unlock(&c_mutex);
+        if (video && video->stream_id != -1) {
+            video->resume();
+        }
+        if (audio && audio->stream_id != -1) {
+            audio->resume();
         }
     }
     pthread_mutex_unlock(&play_mutex);
 }
 
 int64_t get_current_time() {
-    return ff_sec_duration;
-}
-
-int64_t get_duration_time() {
-    return ff_sec_duration;
+    return ff_sec_time;
 }
 
 ////// jni ///////////////////////////////////////////////////////////
 
 jint play_jni(JNIEnv *env, jclass type, jstring path_, jint width, jint height,
               jobject onProgressListener) {
-    const char *path = env->GetStringUTFChars(path_, NULL);
+    const char *path = env->GetStringUTFChars(path_, nullptr);
     jclass plClass = env->GetObjectClass(onProgressListener);
     jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(II)V");
     int ret = start_player(path, width, height, env, onProgressListener, onProgress);
     env->ReleaseStringUTFChars(path_, path);
     return ret;
-}
-
-void seek_jni(JNIEnv *env, jclass type, jfloat percent) {
-    LOGI("percent: %f", percent);
-    f_seek(percent);
 }
 
 void pause_jni(JNIEnv *env, jclass type) {
@@ -285,10 +214,6 @@ jlong get_current_time_jni(JNIEnv *env, jclass type) {
     return get_current_time();
 }
 
-jlong get_duration_time_jni(JNIEnv *env, jclass type) {
-    return get_duration_time();
-}
-
 jint get_play_state_jni(JNIEnv *env, jclass type) {
     int state;
     pthread_mutex_lock(&play_mutex);
@@ -302,7 +227,6 @@ jint get_play_state_jni(JNIEnv *env, jclass type) {
 //"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
 
 JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;IILcom/dming/testplayer/OnProgressListener;)I", (void *) play_jni},
-                            {"seek",              "(F)V",                                                             (void *) seek_jni},
                             {"pause",             "()V",                                                              (void *) pause_jni},
                             {"resume",            "()V",                                                              (void *) resume_jni},
                             {"surface_created",   "(Landroid/view/Surface;)V",                                        (void *) surface_created_jni},
@@ -310,7 +234,6 @@ JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;IILcom/dmi
                             {"surface_destroyed", "()V",                                                              (void *) surface_destroyed_jni},
                             {"release",           "()V",                                                              (void *) release_jni},
                             {"get_current_time",  "()J",                                                              (void *) get_current_time_jni},
-                            {"get_duration_time", "()J",                                                              (void *) get_duration_time_jni},
                             {"get_play_state",    "()I",                                                              (void *) get_play_state_jni},
 };
 
@@ -357,7 +280,6 @@ static void syslog_print(void *ptr, int level, const char *fmt, va_list vl) {
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
-    native_jvm = vm;
     LOGI("JNI_OnLoad");
     JNIEnv *env;
     av_jni_set_java_vm(vm, nullptr);
@@ -375,7 +297,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 
 JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
     LOGI("JNI_OnUnload");
-    native_jvm = NULL;
     JNIEnv *env;
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         unRegisterNativeMethod(env);

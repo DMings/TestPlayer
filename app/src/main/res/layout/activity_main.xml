@@ -36,8 +36,10 @@
             android:layout_height="40dp"
             android:gravity="center"
             android:textSize="14sp"
+            android:ellipsize="marquee"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
             android:textAllCaps="false"
-            android:ellipsize="end"
             android:maxLines="1"
             android:textColor="#fff"
             android:text="无播放"
@@ -65,26 +67,8 @@
                 android:id="@+id/tv_cur_time"
                 android:layout_marginLeft="6dp"
                 android:layout_gravity="center_vertical"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="#fff"
-                android:text="00:00"/>
-
-            <androidx.appcompat.widget.AppCompatSeekBar
-                android:id="@+id/sb_play"
-                android:layout_gravity="center_vertical"
-                android:visibility="invisible"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:progress="0"
-                android:max="100"/>
-
-            <TextView
-                android:id="@+id/tv_total_time"
-                android:layout_gravity="center_vertical"
-                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
                 android:textColor="#fff"

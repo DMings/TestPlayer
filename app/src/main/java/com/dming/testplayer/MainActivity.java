@@ -2,7 +2,6 @@ package com.dming.testplayer;
 
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.SurfaceView;
@@ -10,13 +9,10 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-
-import java.io.File;
 
 /**
  * Created by DMing at 2017/12/21 0021
@@ -27,17 +23,14 @@ public class MainActivity extends AppCompatActivity {
     private TextView mTvSrc;
     private ImageView mPlayBtn;
     private TextView mCurTimeTv;
-    private TextView mTotalTimeTv;
-    private SeekBar mPlaySeekBar;
     private long mTotalTime;
     private long mCurTime;
     private LinearLayout mControlLL;
     private FrameLayout mTitleLayout;
     private Handler mHandler;
-    private String mFilePath;
+    private String mUrlPath;
     private long mSystemTime;
     private FPlayer mFPlayer;
-    private boolean mIsSeeking = false;
     private boolean mIsPlaying = false;
     private boolean mIsShowPlayUI = true;
 
@@ -51,19 +44,13 @@ public class MainActivity extends AppCompatActivity {
         mTitleLayout = findViewById(R.id.fl_title);
         mPlayBtn = findViewById(R.id.iv_play);
         mCurTimeTv = findViewById(R.id.tv_cur_time);
-        mTotalTimeTv = findViewById(R.id.tv_total_time);
-        mPlaySeekBar = findViewById(R.id.sb_play);
         mControlLL = findViewById(R.id.ll_control);
         mHandler = new Handler(Looper.getMainLooper());
-
-        File file = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "degree.mp4");
-        mFilePath = file.getPath();
-        FLog.i("file: " + file.getPath() + " exists: " + file.exists() + " canRead: " + file.canRead());
-
+        mUrlPath = "rtmp://43.138.249.153:1935/live/livestream";
         mPlayBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (mFilePath == null) {
+                if (mUrlPath == null) {
                     Toast.makeText(MainActivity.this, "当前无视频可播放", Toast.LENGTH_SHORT).show();
                     return;
                 }
@@ -88,37 +75,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
                 } else {
-                    if (!mIsSeeking) {
-                        mCurTime = curTime;
-                        mTotalTime = totalTime;
-                        mHandler.removeCallbacks(textRunnable);
-                        mHandler.post(textRunnable);
-                    }
+                    mCurTime = curTime;
+                    mTotalTime = totalTime;
+                    mHandler.removeCallbacks(textRunnable);
+                    mHandler.post(textRunnable);
                 }
             }
         });
-        mPlaySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                mCurTimeTv.setText(DUtils.secToTime((long) (1.0f * seekBar.getProgress() / seekBar.getMax() * mFPlayer.getDurationTime())));
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                mIsSeeking = true;
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                mFPlayer.seekTime(1.0f * seekBar.getProgress() / seekBar.getMax());
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        mIsSeeking = false;
-                    }
-                });
-            }
-        });
+//        mCurTimeTv.setText(DUtils.secToTime((long) (1.0f * seekBar.getProgress() / seekBar.getMax() * mFPlayer.getDurationTime())));
         final ImageView fullBtn = findViewById(R.id.iv_full);
         fullBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -178,13 +142,12 @@ public class MainActivity extends AppCompatActivity {
                         mPlayBtn.setImageResource(R.drawable.ic_button_play);
                     }
                 } else {
-                    final File srcFile = new File(mFilePath);
                     mPlaySv.setVisibility(View.VISIBLE);
-                    int ret = mFPlayer.play("rtmp://43.138.249.153:1935/live/livestream", new Runnable() {
+                    int ret = mFPlayer.play(mUrlPath, new Runnable() {
                         @Override
                         public void run() {
                             mIsShowPlayUI = false;
-                            mTvSrc.setText(srcFile.getName());
+                            mTvSrc.setText(mUrlPath);
                             setVisible();
                         }
                     }, new Runnable() {
@@ -218,11 +181,7 @@ public class MainActivity extends AppCompatActivity {
             if (mTotalTime > 0 && mCurTime == mTotalTime) {
                 mPlayBtn.setImageResource(R.drawable.ic_button_play);
             }
-            mPlaySeekBar.setVisibility(View.VISIBLE);
             mCurTimeTv.setText(DUtils.secToTime(mCurTime));
-            mTotalTimeTv.setText(DUtils.secToTime(mTotalTime));
-            int p = (int) ((mCurTime * 1.0f / mTotalTime) * 100);
-            mPlaySeekBar.setProgress(p);
         }
     };
 

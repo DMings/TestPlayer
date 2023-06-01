@@ -8,10 +8,9 @@ int Audio::must_feed = 0;
 pthread_mutex_t Audio::a_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t Audio::a_cond = PTHREAD_COND_INITIALIZER;
 
-Audio::Audio(UpdateTimeFun *fun) {
+Audio::Audio():pause_cond(),pause_mutex() {
     LOGI("Audio must_feed: %d ", must_feed);
     must_feed = 0;
-    updateTimeFun = fun;
 }
 
 int Audio::synchronize_audio(int nb_samples) {
@@ -86,9 +85,6 @@ void *Audio::audioProcess(void *arg) {
     FPacket *audio_packet = NULL;
     Audio *audio = (Audio *) arg;
     AVFrame *frame = av_frame_alloc();
-    if (audio->updateTimeFun) {
-        audio->updateTimeFun->jvm_attach_fun();
-    }
     LOGI("audioProcess: run!!!");
     while (true) {
         do {
@@ -124,10 +120,10 @@ void *Audio::audioProcess(void *arg) {
         } while (audio_packet == NULL);
         if (audio_packet->checkout_time) {
             checkout_time = true;
-            pthread_mutex_lock(&seek_mutex);
-            avcodec_flush_buffers(audio->av_dec_ctx);
-            swr_convert(audio->swr_context, frame->data, frame->sample_rate, NULL, 0);
-            pthread_mutex_unlock(&seek_mutex);
+//            pthread_mutex_lock(&seek_mutex);
+//            avcodec_flush_buffers(audio->av_dec_ctx);
+//            swr_convert(audio->swr_context, frame->data, frame->sample_rate, NULL, 0);
+//            pthread_mutex_unlock(&seek_mutex);
         }
         // 解码
 //        pthread_mutex_lock(&seek_mutex);
@@ -138,10 +134,6 @@ void *Audio::audioProcess(void *arg) {
                  audio_pkt_list.size());
             av_packet_free(&audio_packet->avPacket);
             free_packet(audio_packet);
-            pthread_mutex_lock(&c_mutex);
-            crash_error = true;
-            pthread_cond_signal(&c_cond);
-            pthread_mutex_unlock(&c_mutex);
             LOGE("Error Audio end");
             break;
         }
@@ -164,28 +156,12 @@ void *Audio::audioProcess(void *arg) {
             double pts = av_q2d(audio->av_stream->time_base) * frame->pts * 1000.0;
             if (checkout_time) {
                 checkout_time = false;
-                pthread_mutex_lock(&seek_mutex);
-                audio_seeking = false;
-//                if (stream_idx == -1) { // 校准时间
-//                    double time = av_gettime_relative() / 1000.0;
-//                    set_master_clock(time - pts);
-//                }
-                pthread_mutex_unlock(&seek_mutex);
             }
-
-            if (audio_seeking) {
-//                LOGE("check_audio_is_seek copy_pkg:%p", audio_packet);
-                continue;
-            }
-
 
             LOGI("audio pts: %f get_master_clock: %f", pts, get_master_clock());
 //            audio->test_audio_time = (av_gettime_relative() / 1000.0);
 
             ff_sec_time = (int32_t) (pts / 1000);
-            if (ff_last_sec_time != ff_sec_time && audio->updateTimeFun) {
-                audio->updateTimeFun->update_time_fun();
-            }
 //            LOGI("updateTimeFun cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
 
             ff_last_sec_time = ff_sec_time;
@@ -244,9 +220,6 @@ void *Audio::audioProcess(void *arg) {
         audio_packet = NULL;
     }
     end:
-    if (audio->updateTimeFun) {
-        audio->updateTimeFun->jvm_detach_fun();
-    }
     av_frame_free(&frame);
     LOGI("audioProcess end audio_pkt_list size: %d", audio_pkt_list.size());
     return 0;

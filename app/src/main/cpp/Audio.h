@@ -13,7 +13,7 @@
 
 class Audio : AV {
 public:
-    Audio(UpdateTimeFun *updateTimeFun);
+    Audio();
 
     int synchronize_audio(int nb_samples);
 
@@ -46,7 +46,6 @@ private:
     uint8_t *dst_data_2 = NULL;
     pthread_t p_audio_tid = 0;
     bool thread_finish = false;
-    UpdateTimeFun *updateTimeFun = NULL;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
     bool is_pause = false;

@@ -13,11 +13,11 @@
 class Video : AV {
 public:
 
-    Video(GLThread* glThread,UpdateTimeFun *fun);
+    Video(GLThread* glThread);
 
     ~Video();
 
-    int open_stream(bool hasAudio);
+    int open_stream();
 
     void pause();
 
@@ -43,8 +43,6 @@ private:
     bool is_pause = false;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
-    UpdateTimeFun* updateTimeFun = NULL;
-    bool has_audio = false;
 
     static PthreadSleep pthread_sleep;
 
