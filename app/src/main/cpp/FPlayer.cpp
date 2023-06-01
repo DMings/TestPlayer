@@ -5,40 +5,34 @@
 #include <unistd.h>
 #include "FPlayer.h"
 
-int FPlayer::start_player(const char *src_filename) {
-    int ret_play = 0;
-    int ret = 0;
-    bool p;
-    bool findKeyFrame = false;
-    pthread_mutex_lock(&play_mutex);
-    p = play_status != IDLE;
-    play_status = PREPARE;
-    pthread_mutex_unlock(&play_mutex);
-    if (p) {
-        return -3;
-    }
-    video = new Video(&glThread, &avClock);
-    audio = new Audio(&avClock);
-    AVPacket *pkt = av_packet_alloc();
+FPlayer::FPlayer() {
+    glThread = new GLThread();
+    avClock = new AVClock();
+    pkt = nullptr;
+}
+
+GLThread *FPlayer::GetGLThread() {
+    return glThread;
+}
+
+int FPlayer::Start(const char *url) {
+    video = new Video(glThread, avClock);
+    audio = new Audio(avClock);
     //
-    auto protocolName = avio_find_protocol_name(src_filename);
+    auto protocolName = avio_find_protocol_name(url);
     LOGI("protocolName: %s", protocolName);
-    LOGI("avformat_open_input %s", src_filename);
+    LOGI("avformat_open_input %s", url);
     const AVInputFormat *fmt = av_find_input_format("flv");
     int64_t timeMs = av_gettime_relative() / 1000;
     AVDictionary *dic = nullptr;
     av_dict_set_int(&dic, "tcp_nodelay", 1, 0);
-//    av_dict_set_int(&dic, "timeout", 3, 0);
     av_dict_set_int(&dic, "rtmp_buffer", 2000, 0);
 
     av_dict_set_int(&dic, "analyzeduration", 1 * AV_TIME_BASE, 0);
     av_dict_set_int(&dic, "fpsprobesize", 0, 0);
 
-    if (avformat_open_input(&fmt_ctx, src_filename, fmt, &dic) < 0) {
-        LOGE("Could not open source file %s", src_filename);
-        pthread_mutex_lock(&play_mutex);
-        play_status = IDLE;
-        pthread_mutex_unlock(&play_mutex);
+    if (avformat_open_input(&fmt_ctx, url, fmt, &dic) < 0) {
+        LOGE("Could not open source file %s", url);
         return -1;
     }
     LOGE("avformat_open_input... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
@@ -47,17 +41,18 @@ int FPlayer::start_player(const char *src_filename) {
     AVDictionary *find_dic = nullptr;
     if (avformat_find_stream_info(fmt_ctx, &find_dic) < 0) {
         LOGE("Could not find stream information");
-        pthread_mutex_lock(&play_mutex);
-        play_status = IDLE;
-        pthread_mutex_unlock(&play_mutex);
         return -2;
     }
     LOGE("avformat_find_stream_info... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
     audio->open_stream(fmt_ctx);
     video->open_stream(fmt_ctx);
-    pthread_mutex_lock(&play_mutex);
-    play_status = PLAYING;
-    pthread_mutex_unlock(&play_mutex);
+    pkt = av_packet_alloc();
+    return 0;
+}
+
+int FPlayer::Loop() {
+    int ret = 0;
+    bool findKeyFrame = false;
     do {
         ret = av_read_frame(fmt_ctx, pkt);
         if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
@@ -86,70 +81,57 @@ int FPlayer::start_player(const char *src_filename) {
         }
         av_packet_unref(pkt);
     } while (ret >= 0);
-    pthread_mutex_lock(&play_mutex);
-    play_status = STOPPING;
-    LOGE("Release play_status: %d", play_status);
-    pthread_mutex_unlock(&play_mutex);
-    audio->release();
-    video->release();
+    return 0;
+}
+
+void FPlayer::Pause() {
+    if (fmt_ctx) {
+        av_read_pause(fmt_ctx);
+    }
+    if (video && video->stream_id != -1) {
+        video->pause();
+    }
+    if (audio && audio->stream_id != -1) {
+        audio->pause();
+    }
+}
+
+void FPlayer::Resume() {
+    if (fmt_ctx) {
+        av_read_play(fmt_ctx);
+    }
+    if (video && video->stream_id != -1) {
+        video->resume();
+    }
+    if (audio && audio->stream_id != -1) {
+        audio->resume();
+    }
+}
+
+int64_t FPlayer::GetCurTimeMs() {
+    return avClock->ff_sec_time;
+}
+
+void FPlayer::Stop() {
+    LOGE("play Stop");
+    if (audio) {
+        audio->release();
+    }
+    if (video) {
+        video->release();
+    }
     delete audio;
     delete video;
     audio = nullptr;
     video = nullptr;
-    LOGI("audio.release()  video.Release()");
+    LOGI("audio.Stop()  video.Release()");
     avformat_flush(fmt_ctx);
     av_packet_free(&pkt);
     avformat_close_input(&fmt_ctx);
     LOGI("avformat_close_input");
-    pthread_mutex_lock(&play_mutex);
-    play_status = IDLE;
-    pthread_mutex_unlock(&play_mutex);
-    return ret_play;
 }
 
-void FPlayer::pause() {
-    pthread_mutex_lock(&play_mutex);
-    if (play_status == PLAYING) {
-        if (fmt_ctx) {
-            av_read_pause(fmt_ctx);
-        }
-        if (video && video->stream_id != -1) {
-            video->pause();
-        }
-        if (audio && audio->stream_id != -1) {
-            audio->pause();
-        }
-    }
-    pthread_mutex_unlock(&play_mutex);
-}
-
-void FPlayer::resume() {
-    pthread_mutex_lock(&play_mutex);
-    if (play_status == PLAYING) {
-        if (fmt_ctx) {
-            av_read_play(fmt_ctx);
-        }
-        if (video && video->stream_id != -1) {
-            video->resume();
-        }
-        if (audio && audio->stream_id != -1) {
-            audio->resume();
-        }
-    }
-    pthread_mutex_unlock(&play_mutex);
-}
-
-int64_t FPlayer::get_current_time() {
-    return avClock.ff_sec_time;
-}
-
-int FPlayer::get_play_state() {
-    int state;
-    pthread_mutex_lock(&play_mutex);
-    state = play_status;
-    pthread_mutex_unlock(&play_mutex);
-    return state;
-}
-
-void FPlayer::release() {
+FPlayer::~FPlayer() {
+    delete avClock;
+    delete glThread;
 }

@@ -206,7 +206,7 @@ void Video::pause() {
 }
 
 void Video::resume() {
-    LOGI("Video Resume start");
+    LOGI("Video Resume Start");
     pthread_mutex_lock(&pause_mutex);
     is_pause = false;
     pthread_cond_signal(&pause_cond);

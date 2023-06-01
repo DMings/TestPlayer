@@ -29,14 +29,11 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Runnable mEndRunnable;
     private AtomicInteger mControlStatus = new AtomicInteger(PlayStatus.IDLE); // 0 idle 1 prepare 2 playing
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
-    private int mSurfaceWidth;
-    private int mSurfaceHeight;
     private long mPtr;
 
     public FPlayer(SurfaceView surfaceView) {
         mPtr = newInstance();
         surfaceView.getHolder().addCallback(this);
-//        mEglHelper = new EglHelper();
         mPlayThread = new HandlerThread("FPlayer");
         mPlayThread.start();
         mPlayHandler = new Handler(mPlayThread.getLooper());
@@ -69,7 +66,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public void onDestroy() {
-        release(mPtr);
+        stop(mPtr);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
             mPlayThread.quitSafely();
         } else {
@@ -88,13 +85,13 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public int getPlayState() {
-        int s = get_play_state(mPtr);
-        Log.i("DMFF", "getPlayState:     " + s);
+        int s = mControlStatus.get();
+        FLog.i( "getPlayState:     " + s);
         return s;
     }
 
     private void changeToPlay() {
-        release(mPtr);
+        stop(mPtr);
         startPlay();
     }
 
@@ -114,7 +111,9 @@ public class FPlayer implements SurfaceHolder.Callback {
         @Override
         public void run() {
             mControlStatus.set(PlayStatus.PLAYING);
-            int ret = FPlayer.play(mPtr, mSrcPath);
+            int ret = FPlayer.start(mPtr, mSrcPath);
+            FPlayer.loop(mPtr);
+            FPlayer.stop(mPtr);
             FLog.i("PlayStatus.IDLE");
             mControlStatus.set(PlayStatus.IDLE);
             if (ret < 0) {
@@ -136,8 +135,6 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        mSurfaceWidth = width;
-        mSurfaceHeight = height;
         Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
         surface_changed(mPtr, holder.getSurface(), width, height);
     }
@@ -153,23 +150,23 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     private static native long newInstance();
 
-    private static native int play(long ptr, String path);
+    private static native int start(long ptr, String path);
 
-    private static native long get_current_time(long ptr);
+    private static native int loop(long ptr);
 
     private static native void pause(long ptr);
 
     private static native void resume(long ptr);
 
-    private static native int get_play_state(long ptr);
+    private static native void stop(long ptr);
+
+    private static native long get_current_time(long ptr);
 
     private static native void surface_created(long ptr, Surface surface);
 
     private static native void surface_changed(long ptr, Surface surface, int width, int height);
 
     private static native void surface_destroyed(long ptr);
-
-    private static native void release(long ptr);
 
     private static native void deleteInstance(long ptr);
 }

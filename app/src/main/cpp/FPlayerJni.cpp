@@ -22,55 +22,55 @@ jlong NewInstance(JNIEnv *env, jclass type) {
     return reinterpret_cast<jlong>(ptr);
 }
 
-jint Play(JNIEnv *env, jclass type, jlong ptr, jstring path_) {
+jint Start(JNIEnv *env, jclass type, jlong ptr, jstring path_) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     const char *path = env->GetStringUTFChars(path_, nullptr);
-    int ret = player->start_player(path);
+    int ret = player->Start(path);
     env->ReleaseStringUTFChars(path_, path);
     return ret;
 }
 
+int Loop(JNIEnv *env, jclass type, jlong ptr) {
+    auto player = reinterpret_cast<FPlayer *>(ptr);
+    return player->Loop();
+}
+
 void Pause(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
-    player->pause();
+    player->Pause();
 }
 
 void Resume(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
-    player->resume();
+    player->Resume();
 }
 
 void SurfaceCreated(JNIEnv *env, jclass type, jlong ptr, jobject surface) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    player->glThread.surfaceCreated(window);
+    player->GetGLThread()->surfaceCreated(window);
 }
 
 void
 SurfaceChanged(JNIEnv *env, jclass type, jlong ptr, jobject surface, jint width, jint height) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    player->glThread.surfaceChanged(window, width, height);
+    player->GetGLThread()->surfaceChanged(window, width, height);
 }
 
 void SurfaceDestroyed(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
-    player->glThread.surfaceDestroyed();
+    player->GetGLThread()->surfaceDestroyed();
 }
 
-void Release(JNIEnv *env, jclass type, jlong ptr) {
+void Stop(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
-    player->release();
+    player->Stop();
 }
 
 jlong GetCurrentTime(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
-    return player->get_current_time();
-}
-
-jint GetPlayState(JNIEnv *env, jclass type, jlong ptr) {
-    auto player = reinterpret_cast<FPlayer *>(ptr);
-    return player->get_play_state();
+    return player->GetCurTimeMs();
 }
 
 void DeleteInstance(JNIEnv *env, jclass type, jlong ptr) {
@@ -85,15 +85,15 @@ void DeleteInstance(JNIEnv *env, jclass type, jlong ptr) {
 
 JNINativeMethod method[] = {
         {"newInstance",       "()J",                          (void *) NewInstance},
-        {"play",              "(JLjava/lang/String;)I",       (void *) Play},
+        {"start",             "(JLjava/lang/String;)I",       (void *) Start},
+        {"loop",              "(J)I",                         (void *) Loop},
         {"pause",             "(J)V",                         (void *) Pause},
         {"resume",            "(J)V",                         (void *) Resume},
+        {"stop",              "(J)V",                         (void *) Stop},
         {"surface_created",   "(JLandroid/view/Surface;)V",   (void *) SurfaceCreated},
         {"surface_changed",   "(JLandroid/view/Surface;II)V", (void *) SurfaceChanged},
         {"surface_destroyed", "(J)V",                         (void *) SurfaceDestroyed},
-        {"release",           "(J)V",                         (void *) Release},
         {"get_current_time",  "(J)J",                         (void *) GetCurrentTime},
-        {"get_play_state",    "(J)I",                         (void *) GetPlayState},
         {"deleteInstance",    "(J)V",                         (void *) DeleteInstance},
 };
 

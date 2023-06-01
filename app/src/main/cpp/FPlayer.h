@@ -13,28 +13,33 @@ enum PlayStatus {
 };
 
 class FPlayer {
-public:
-    PlayStatus play_status = IDLE;
-    pthread_mutex_t play_mutex = PTHREAD_MUTEX_INITIALIZER;
-
+private:
     AVFormatContext *fmt_ctx = NULL;
     Video *video = nullptr;
     Audio *audio = nullptr;
-    GLThread glThread;
-    AVClock avClock;
+    GLThread *glThread;
+    AVClock *avClock;
+    AVPacket *pkt;
 
 public:
-    int start_player(const char *src_filename);
 
-    void pause();
+    FPlayer();
 
-    void resume();
+    GLThread *GetGLThread();
 
-    int64_t get_current_time();
+    int Start(const char *url);
 
-    int get_play_state();
+    int Loop();
 
-    void release();
+    void Pause();
+
+    void Resume();
+
+    int64_t GetCurTimeMs();
+
+    void Stop();
+
+    ~FPlayer();
 };
 
 #endif //TESTPLAYER_FFUTILS_H

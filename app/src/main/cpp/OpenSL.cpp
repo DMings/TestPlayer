@@ -206,40 +206,40 @@ void OpenSL::play() {
 }
 
 void OpenSL::pause() {
-//    LOGI("OpenSL pause>>>>>");
+//    LOGI("OpenSL Pause>>>>>");
 //    if (bqPlayerPlay != NULL) {
 //        (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_PAUSED);
 //    }
 }
 
 void OpenSL::release() {
-//    LOGI("OpenSL release>>>>>");
+//    LOGI("OpenSL Stop>>>>>");
 //    //设置停止状态
 //    if (bqPlayerPlay) {
 //        (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_STOPPED);
 //        (*bqPlayerBufferQueue)->Clear(bqPlayerBufferQueue);
 //        bqPlayerPlay = NULL;
 //    }
-//    LOGI("OpenSL release>>>>>SetPlayState");
+//    LOGI("OpenSL Stop>>>>>SetPlayState");
 //    //销毁播放器
 //    if (bqPlayerObject) {
 //        (*bqPlayerObject)->Destroy(bqPlayerObject);
 //        bqPlayerObject = NULL;
 //        bqPlayerBufferQueue = NULL;
 //    }
-//    LOGI("OpenSL release>>>>>bqPlayerObject");
+//    LOGI("OpenSL Stop>>>>>bqPlayerObject");
 //    //销毁混音器
 //    if (outputMixObject) {
 //        (*outputMixObject)->Destroy(outputMixObject);
 //        outputMixObject = NULL;
 //    }
-//    LOGI("OpenSL release>>>>>outputMixObject");
+//    LOGI("OpenSL Stop>>>>>outputMixObject");
 //    //销毁引擎
 //    if (engineObject) {
 //        (*engineObject)->Destroy(engineObject);
 //        engineObject = NULL;
 //        engineEngine = NULL;
 //    }
-//    LOGI("OpenSL release>>>>>engineObject");
+//    LOGI("OpenSL Stop>>>>>engineObject");
 }
 
