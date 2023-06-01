@@ -49,9 +49,9 @@ swr_convert // 转换音频buffer,由于AVFrame中的数据不一定是opensl中
 ##### video解帧显示线程
 
 创建OpenGL环境，设置显示大小，大小变化跟随 surface的回调而改变(视频切换的时候并不需要改变环境，切换视频只需要改变纹理尺寸)  
-void surface_created(Surface surface);  
-void surface_changed(Surface surface, int width, int height);  
-void surface_destroyed();  
+void SurfaceCreated(Surface surface);  
+void SurfaceChanged(Surface surface, int width, int height);  
+void SurfaceDestroyed();  
 视频初始化  
 av_find_best_stream // 获取视频类型下最好的流  
 avcodec_find_decoder // 获取解码器  

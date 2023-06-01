@@ -6,20 +6,19 @@
 #ifndef TESTPLAYER_AUDIO_H
 #define TESTPLAYER_AUDIO_H
 
-#include "FFmpeg.h"
 #include "OpenSL.h"
-#include "AV.h"
+#include "BaseAV.h"
 #include "PthreadSleep.h"
 
-class Audio : AV {
+class Audio : BaseAV {
 public:
-    Audio();
+    Audio(AVClock* avClock);
+
+    void putAvPacket(FPacket* pkt);
 
     int synchronize_audio(int nb_samples);
 
-    static void slBufferCallback();
-
-    int open_stream();
+    int open_stream(AVFormatContext *fmt_ctx);
 
     void pause();
 
@@ -27,9 +26,7 @@ public:
 
     void release();
 
-    static int must_feed;
-    static pthread_mutex_t a_mutex;
-    static pthread_cond_t a_cond;
+    AVClock* avClock;
 
     int stream_id = -1;
     AVStream *av_stream = NULL;

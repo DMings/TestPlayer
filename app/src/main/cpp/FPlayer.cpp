@@ -5,31 +5,11 @@
 #include <unistd.h>
 #include "FPlayer.h"
 
-extern "C" {
-#include "libavcodec/jni.h"
-}
-
-enum PlayStatus {
-    IDLE, PREPARE, PLAYING, STOPPING,
-};
-PlayStatus play_status = IDLE;
-pthread_mutex_t play_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-Video *video = nullptr;
-Audio *audio = nullptr;
-GLThread glThread;
-
-void refresh_finish(JNIEnv *env, jobject p_obj, jmethodID progress) {
-    ff_sec_time = 0;
-    env->CallVoidMethod(p_obj, progress, -1, -1);
-}
-
-int start_player(const char *src_filename,
-                 int width, int height,
-                 JNIEnv *env, jobject progressObj, jmethodID onProgress) {
+int FPlayer::start_player(const char *src_filename) {
     int ret_play = 0;
     int ret = 0;
     bool p;
+    bool findKeyFrame = false;
     pthread_mutex_lock(&play_mutex);
     p = play_status != IDLE;
     play_status = PREPARE;
@@ -37,12 +17,10 @@ int start_player(const char *src_filename,
     if (p) {
         return -3;
     }
-    video = new Video(&glThread);
-    audio = new Audio();
+    video = new Video(&glThread, &avClock);
+    audio = new Audio(&avClock);
     AVPacket *pkt = av_packet_alloc();
     //
-    video->view_width = width;
-    video->view_height = height;
     auto protocolName = avio_find_protocol_name(src_filename);
     LOGI("protocolName: %s", protocolName);
     LOGI("avformat_open_input %s", src_filename);
@@ -53,7 +31,7 @@ int start_player(const char *src_filename,
 //    av_dict_set_int(&dic, "timeout", 3, 0);
     av_dict_set_int(&dic, "rtmp_buffer", 2000, 0);
 
-    av_dict_set_int(&dic, "analyzeduration", 0, 0);
+    av_dict_set_int(&dic, "analyzeduration", 1 * AV_TIME_BASE, 0);
     av_dict_set_int(&dic, "fpsprobesize", 0, 0);
 
     if (avformat_open_input(&fmt_ctx, src_filename, fmt, &dic) < 0) {
@@ -75,15 +53,8 @@ int start_player(const char *src_filename,
         return -2;
     }
     LOGE("avformat_find_stream_info... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
-    pthread_mutex_init(&c_mutex, nullptr);
-    pthread_cond_init(&c_cond, nullptr);
-    //
-    ff_init();
-    // ->>
-    LOGI("fmt_ctx->duration %lld", fmt_ctx->duration);
-
-    audio->open_stream();
-    video->open_stream();
+    audio->open_stream(fmt_ctx);
+    video->open_stream(fmt_ctx);
     pthread_mutex_lock(&play_mutex);
     play_status = PLAYING;
     pthread_mutex_unlock(&play_mutex);
@@ -92,16 +63,32 @@ int start_player(const char *src_filename,
         if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
             if (pkt->stream_index == video->stream_id) {
                 pkt->time_base = video->av_stream->time_base;
+                if (pkt->flags == AV_PKT_FLAG_KEY) {
+                    findKeyFrame = true;
+                    LOGE("findKeyFrame key pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index,
+                         pkt->pts,
+                         av_rescale_q(pkt->pts, pkt->time_base, AV_TIME_BASE_Q));
+                }
             } else {
                 pkt->time_base = audio->av_stream->time_base;
             }
+            if (findKeyFrame) {
+                AVPacket *c_pkt = av_packet_alloc();
+                av_packet_move_ref(c_pkt, pkt);
+                FPacket *f_pkt = alloc_packet();
+                f_pkt->avPacket = c_pkt;
+                if (c_pkt->stream_index == video->stream_id) {
+                    video->putAvPacket(f_pkt);
+                } else {
+                    audio->putAvPacket(f_pkt);
+                }
+            }
         }
-        decode_packet(pkt, audio->stream_id, video->stream_id);
         av_packet_unref(pkt);
     } while (ret >= 0);
     pthread_mutex_lock(&play_mutex);
     play_status = STOPPING;
-    LOGE("release play_status: %d", play_status);
+    LOGE("Release play_status: %d", play_status);
     pthread_mutex_unlock(&play_mutex);
     audio->release();
     video->release();
@@ -109,12 +96,10 @@ int start_player(const char *src_filename,
     delete video;
     audio = nullptr;
     video = nullptr;
-    LOGI("audio.release()  video.release()");
-    refresh_finish(env, progressObj, onProgress);
+    LOGI("audio.release()  video.Release()");
     avformat_flush(fmt_ctx);
     av_packet_free(&pkt);
     avformat_close_input(&fmt_ctx);
-    ff_release();
     LOGI("avformat_close_input");
     pthread_mutex_lock(&play_mutex);
     play_status = IDLE;
@@ -122,7 +107,7 @@ int start_player(const char *src_filename,
     return ret_play;
 }
 
-void f_pause() {
+void FPlayer::pause() {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
         if (fmt_ctx) {
@@ -138,7 +123,7 @@ void f_pause() {
     pthread_mutex_unlock(&play_mutex);
 }
 
-void f_resume() {
+void FPlayer::resume() {
     pthread_mutex_lock(&play_mutex);
     if (play_status == PLAYING) {
         if (fmt_ctx) {
@@ -154,67 +139,11 @@ void f_resume() {
     pthread_mutex_unlock(&play_mutex);
 }
 
-void f_release() {
-    pthread_mutex_lock(&play_mutex);
-    LOGE("play_status: %d", play_status);
-    if (play_status != IDLE && play_status != STOPPING) {
-        if (video && video->stream_id != -1) {
-            video->resume();
-        }
-        if (audio && audio->stream_id != -1) {
-            audio->resume();
-        }
-    }
-    pthread_mutex_unlock(&play_mutex);
+int64_t FPlayer::get_current_time() {
+    return avClock.ff_sec_time;
 }
 
-int64_t get_current_time() {
-    return ff_sec_time;
-}
-
-////// jni ///////////////////////////////////////////////////////////
-
-jint play_jni(JNIEnv *env, jclass type, jstring path_, jint width, jint height,
-              jobject onProgressListener) {
-    const char *path = env->GetStringUTFChars(path_, nullptr);
-    jclass plClass = env->GetObjectClass(onProgressListener);
-    jmethodID onProgress = env->GetMethodID(plClass, "onProgress", "(II)V");
-    int ret = start_player(path, width, height, env, onProgressListener, onProgress);
-    env->ReleaseStringUTFChars(path_, path);
-    return ret;
-}
-
-void pause_jni(JNIEnv *env, jclass type) {
-    f_pause();
-}
-
-void resume_jni(JNIEnv *env, jclass type) {
-    f_resume();
-}
-
-void surface_created_jni(JNIEnv *env, jclass type, jobject surface) {
-    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    glThread.surfaceCreated(window);
-}
-
-void surface_changed_jni(JNIEnv *env, jclass type, jobject surface, jint width, jint height) {
-    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
-    glThread.surfaceChanged(window, width, height);
-}
-
-void surface_destroyed_jni(JNIEnv *env, jclass type) {
-    glThread.surfaceDestroyed();
-}
-
-void release_jni(JNIEnv *env, jclass type) {
-    f_release();
-}
-
-jlong get_current_time_jni(JNIEnv *env, jclass type) {
-    return get_current_time();
-}
-
-jint get_play_state_jni(JNIEnv *env, jclass type) {
+int FPlayer::get_play_state() {
     int state;
     pthread_mutex_lock(&play_mutex);
     state = play_status;
@@ -222,86 +151,5 @@ jint get_play_state_jni(JNIEnv *env, jclass type) {
     return state;
 }
 
-// 动态注册需要制定具体类型名，静态又不用
-//Java_com_dming_testplayer_gl_TestActivity_play(JNIEnv *env, jobject instance, jstring path_, jobject surface,jobject onProgressListener)
-//"play",              "(Ljava/lang/String;Landroid/view/Surface;Lcom/dming/testplayer/OnProgressListener;)V"
-
-JNINativeMethod method[] = {{"play",              "(Ljava/lang/String;IILcom/dming/testplayer/OnProgressListener;)I", (void *) play_jni},
-                            {"pause",             "()V",                                                              (void *) pause_jni},
-                            {"resume",            "()V",                                                              (void *) resume_jni},
-                            {"surface_created",   "(Landroid/view/Surface;)V",                                        (void *) surface_created_jni},
-                            {"surface_changed",   "(Landroid/view/Surface;II)V",                                      (void *) surface_changed_jni},
-                            {"surface_destroyed", "()V",                                                              (void *) surface_destroyed_jni},
-                            {"release",           "()V",                                                              (void *) release_jni},
-                            {"get_current_time",  "()J",                                                              (void *) get_current_time_jni},
-                            {"get_play_state",    "()I",                                                              (void *) get_play_state_jni},
-};
-
-jint registerNativeMethod(JNIEnv *env) {
-    jclass cl = env->FindClass("com/dming/testplayer/FPlayer");
-    if ((env->RegisterNatives(cl, method, sizeof(method) / sizeof(method[0]))) < 0) {
-        return -1;
-    }
-    return 0;
+void FPlayer::release() {
 }
-
-jint unRegisterNativeMethod(JNIEnv *env) {
-    jclass cl = env->FindClass("com/dming/testplayer/FPlayer");
-    env->UnregisterNatives(cl);
-    return 0;
-}
-
-static char buffer[1024];
-pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
-
-static void syslog_print(void *ptr, int level, const char *fmt, va_list vl) {
-//    lock.lock();
-    pthread_mutex_lock(&log_lock);
-    memset(buffer, 0, 1024);
-    vsprintf(buffer, fmt, vl);
-    switch (level) {
-        case AV_LOG_DEBUG:
-            LOGD("FFmpeg: %s", buffer);
-            break;
-        case AV_LOG_VERBOSE:
-            LOGV("FFmpeg: %s", buffer);
-            break;
-        case AV_LOG_INFO:
-            LOGI("FFmpeg: %s", buffer);
-            break;
-        case AV_LOG_WARNING:
-            LOGW("FFmpeg: %s", buffer);
-            break;
-        case AV_LOG_ERROR:
-            LOGE("FFmpeg: %s", buffer);
-            break;
-    }
-    pthread_mutex_unlock(&log_lock);
-}
-
-JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
-    LOGI("JNI_OnLoad");
-    JNIEnv *env;
-    av_jni_set_java_vm(vm, nullptr);
-    av_log_set_level(AV_LOG_INFO);
-    av_log_set_callback(syslog_print);
-    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
-        registerNativeMethod(env);
-        return JNI_VERSION_1_6;
-    } else if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
-        registerNativeMethod(env);
-        return JNI_VERSION_1_4;
-    }
-    return JNI_ERR;
-}
-
-JNIEXPORT void JNI_OnUnload(JavaVM *vm, void *reserved) {
-    LOGI("JNI_OnUnload");
-    JNIEnv *env;
-    if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
-        unRegisterNativeMethod(env);
-    } else if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_OK) {
-        unRegisterNativeMethod(env);
-    }
-}
-

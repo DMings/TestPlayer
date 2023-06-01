@@ -50,7 +50,7 @@ typedef struct AVD3D11VADeviceContext {
      * Must be set by the user. This is the only mandatory field - the other
      * device context fields are set from this and are available for convenience.
      *
-     * Deallocating the AVHWDeviceContext will always release this interface,
+     * Deallocating the AVHWDeviceContext will always Release this interface,
      * and it does not matter whether it was user-allocated.
      */
     ID3D11Device        *device;
@@ -58,7 +58,7 @@ typedef struct AVD3D11VADeviceContext {
     /**
      * If unset, this will be set from the device field on init.
      *
-     * Deallocating the AVHWDeviceContext will always release this interface,
+     * Deallocating the AVHWDeviceContext will always Release this interface,
      * and it does not matter whether it was user-allocated.
      */
     ID3D11DeviceContext *device_context;
@@ -66,7 +66,7 @@ typedef struct AVD3D11VADeviceContext {
     /**
      * If unset, this will be set from the device field on init.
      *
-     * Deallocating the AVHWDeviceContext will always release this interface,
+     * Deallocating the AVHWDeviceContext will always Release this interface,
      * and it does not matter whether it was user-allocated.
      */
     ID3D11VideoDevice   *video_device;
@@ -74,7 +74,7 @@ typedef struct AVD3D11VADeviceContext {
     /**
      * If unset, this will be set from the device_context field on init.
      *
-     * Deallocating the AVHWDeviceContext will always release this interface,
+     * Deallocating the AVHWDeviceContext will always Release this interface,
      * and it does not matter whether it was user-allocated.
      */
     ID3D11VideoContext  *video_context;
@@ -109,7 +109,7 @@ typedef struct AVD3D11VADeviceContext {
 typedef struct AVD3D11FrameDescriptor {
     /**
      * The texture in which the frame is located. The reference count is
-     * managed by the AVBufferRef, and destroying the reference will release
+     * managed by the AVBufferRef, and destroying the reference will Release
      * the interface.
      *
      * Normally stored in AVFrame.data[0].
@@ -142,7 +142,7 @@ typedef struct AVD3D11VAFramesContext {
      * - and wants it to use it for decoding
      * - this has to be done before calling av_hwframe_ctx_init()
      *
-     * Deallocating the AVHWFramesContext will always release this interface,
+     * Deallocating the AVHWFramesContext will always Release this interface,
      * and it does not matter whether it was user-allocated.
      *
      * This is in particular used by the libavcodec D3D11VA hwaccel, which

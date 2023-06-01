@@ -79,7 +79,7 @@ typedef struct MediaCodecBuffer AVMediaCodecBuffer;
  * subsequent calls to this function will have no effect.
  *
  * @param buffer the buffer to render
- * @param render 1 to release and render the buffer to the surface or 0 to
+ * @param render 1 to Release and render the buffer to the surface or 0 to
  * discard the buffer
  * @return 0 on success, < 0 otherwise
  */

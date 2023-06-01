@@ -245,7 +245,7 @@
  *
  * Some of possible use cases:
  * - an "open file" dialog to choose files from a remote location,
- * - a recursive media finder providing a player with an ability to play all
+ * - a recursive media finder providing a player with an ability to Play all
  * files from a given directory.
  *
  * @subsection lavf_io_dirlist_open Opening a directory
@@ -653,7 +653,7 @@ typedef struct AVInputFormat {
                               int64_t *pos, int64_t pos_limit);
 
     /**
-     * Start/resume playing - only meaningful if using a network-based format
+     * Start/Resume playing - only meaningful if using a network-based format
      * (RTSP).
      */
     int (*read_play)(struct AVFormatContext *);
@@ -2180,7 +2180,7 @@ int av_read_play(AVFormatContext *s);
 /**
  * Pause a network-based stream (e.g. RTSP stream).
  *
- * Use av_read_play() to resume it.
+ * Use av_read_play() to Resume it.
  */
 int av_read_pause(AVFormatContext *s);
 

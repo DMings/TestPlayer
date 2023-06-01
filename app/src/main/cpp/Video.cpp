@@ -6,9 +6,10 @@
 
 PthreadSleep Video::pthread_sleep;
 
-Video::Video(GLThread *glThread) {
+Video::Video(GLThread *glThread, AVClock *avClock) : avClock(avClock) {
     this->glThread = glThread;
-    dst_data[0] = NULL;
+    dst_data[0] = nullptr;
+    thread_finish = false;
 }
 
 Video::~Video() {
@@ -27,7 +28,7 @@ uint Video::synchronize_video(double pkt_duration) { // us
     }
     duration = duration < 200 ? duration : 200;
 
-    diff_ms = get_video_pts_clock() - get_audio_clock();
+    diff_ms = avClock->get_video_pts_clock() - avClock->get_audio_clock();
 
     if (diff_ms < 0) { // 视频落后时间
         if (fabs(diff_ms) < duration * 0.1) { // 如果差距比较少就不管了
@@ -50,141 +51,119 @@ uint Video::synchronize_video(double pkt_duration) { // us
     return wanted_delay;
 }
 
+void Video::putAvPacket(FPacket *pkt) {
+    pthread_mutex_lock(&c_mutex);
+    pkt_list.push_back(pkt);
+    pthread_cond_signal(&c_cond);
+    pthread_mutex_unlock(&c_mutex);
+}
+
 void *Video::videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
-    bool checkout_time = false;
     Video *video = (Video *) arg;
-    FPacket *video_packet = NULL;
+    FPacket *video_packet = nullptr;
     video->glThread->setParams(video->dst_data[0], video->av_dec_ctx->width,
                                video->av_dec_ctx->height);
     LOGI("videoProcess: run!!!");
     pthread_sleep.reset();
-    while (true) {
+    while (!video->thread_finish) {
         do {
-//            LOGE("video_pkt_list size: %d", video_pkt_list.size())
-            pthread_mutex_lock(&c_mutex);
-            video_packet = NULL;
-            if (!video_pkt_list.empty()) {
-                video_packet = video_pkt_list.front();
-                video_pkt_list.pop_front();
-                if (video_pkt_list.size() <= 1) {
-                    pthread_cond_signal(&c_cond);
-                }
+            video_packet = nullptr;
+            pthread_mutex_lock(&video->c_mutex);
+            if (!video->pkt_list.empty()) {
+                video_packet = video->pkt_list.front();
+                video->pkt_list.pop_front();
             } else {
-                if (!video->thread_finish) {
-                    pthread_cond_signal(&c_cond);
-                    pthread_cond_wait(&video_cond, &c_mutex);
-                } else {
-                    pthread_mutex_unlock(&c_mutex);
-                    goto end; // 线程不再运行，结束
-                }
-                if (!video_pkt_list.empty()) {
-                    video_packet = video_pkt_list.front();
-                    video_pkt_list.pop_front();
-                } else {
-                    if (video->thread_finish) {
-                        pthread_mutex_unlock(&c_mutex);
-                        goto end;// 线程不再运行，结束
-                    }
+                pthread_cond_wait(&video->c_cond, &video->c_mutex);
+                if (!video->pkt_list.empty()) {
+                    video_packet = video->pkt_list.front();
+                    video->pkt_list.pop_front();
                 }
             }
-            pthread_mutex_unlock(&c_mutex);
-        } while (video_packet == NULL);
-
-        if (video_packet->checkout_time) {
-            checkout_time = true;
-            avcodec_flush_buffers(video->av_dec_ctx);
-        }
-
-//        LOGE("video copy_pkg:%p %X", video_packet);
-        // 解码
-//        pthread_mutex_lock(&seek_mutex);
-        ret = avcodec_send_packet(video->av_dec_ctx, video_packet->avPacket);
-//        pthread_mutex_unlock(&seek_mutex);
-        if (ret < 0) {
-            LOGE("Error video sending a packet for decoding video_pkt_list size: %d",
-                 video_pkt_list.size());
-            av_packet_free(&video_packet->avPacket);
-            free_packet(video_packet);
-            LOGE("Error video end");
-            break;
-        }
-        while (ret >= 0) {
-//            pthread_mutex_lock(&seek_mutex);
-            ret = avcodec_receive_frame(video->av_dec_ctx, frame);
-//            pthread_mutex_unlock(&seek_mutex);
-            if (ret == AVERROR(EAGAIN)) {
+            pthread_mutex_unlock(&video->c_mutex);
+        } while (video_packet == nullptr && !video->thread_finish);
+        if (video_packet != nullptr) {
+            if (video_packet->checkout_time) {
+                avcodec_flush_buffers(video->av_dec_ctx);
+            }
+            ret = avcodec_send_packet(video->av_dec_ctx, video_packet->avPacket);
+            if (ret < 0) {
+                LOGE("Error video sending a packet for decoding video->pkt_list size: %d",
+                     video->pkt_list.size());
+                av_packet_free(&video_packet->avPacket);
+                free_packet(video_packet);
+                LOGE("Error video end");
+                break;
+            }
+            while (ret >= 0) {
+                ret = avcodec_receive_frame(video->av_dec_ctx, frame);
+                if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
-                break;
-            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) ||
-                       ret == AVERROR_INPUT_CHANGED) {
-                LOGE("video some err!");
-                break;
-            } else if (ret < 0) {
-                LOGE("video legitimate decoding errors");
-                break;
-            }
-            //  用 st 上的时基才对 av_stream
-            double pts = (int64_t) (av_q2d(video->av_stream->time_base) * frame->pts *
-                                    1000.0); // ms
-            if (checkout_time) {
-                checkout_time = false;
-            }
-            LOGI("video pts: %f get_master_clock: %f", pts, get_master_clock());
-            double pkt_duration = (int64_t) (av_q2d(video->av_stream->time_base) *
-                                             frame->pkt_duration * 1000.0); // ms
-            video->glThread->lockDraw();
-            ret = sws_scale(video->sws_context,
-                            (const uint8_t *const *) frame->data, frame->linesize,
-                            0, video->av_dec_ctx->height,
-                            video->dst_data, video->dst_line_size); // lock
-            video->glThread->unlockDraw();
+                    break;
+                } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) ||
+                           ret == AVERROR_INPUT_CHANGED) {
+                    LOGE("video some err!");
+                    break;
+                } else if (ret < 0) {
+                    LOGE("video legitimate decoding errors");
+                    break;
+                }
+                //  用 st 上的时基才对 av_stream
+                double pts = (int64_t) (av_q2d(video->av_stream->time_base) * frame->pts *
+                                        1000.0); // ms
+
+                LOGI("video pts: %f get_master_clock: %f", pts, video->avClock->get_master_clock());
+                double pkt_duration = (int64_t) (av_q2d(video->av_stream->time_base) *
+                                                 frame->pkt_duration * 1000.0); // ms
+                video->glThread->lockDraw();
+                ret = sws_scale(video->sws_context,
+                                (const uint8_t *const *) frame->data, frame->linesize,
+                                0, video->av_dec_ctx->height,
+                                video->dst_data, video->dst_line_size); // lock
+                video->glThread->unlockDraw();
 
 //            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
 //                 get_audio_clock(),
 //                 get_master_clock(),
 //                 pkt_duration);
-            set_video_clock(pts);
-            int delay = video->synchronize_video(pkt_duration); // ms
+                video->avClock->set_video_clock(pts);
+                int delay = video->synchronize_video(pkt_duration); // ms
 //            LOGI("video delay->%d pts: %f get_master_clock: %f video_time: %f", delay, pts, get_master_clock(),
 //                 (get_master_clock() - video->test_video_time));
-            if (delay >= 0) {
+                if (delay >= 0) {
 //                av_usleep((uint) delay * 1000); // us
-                pthread_sleep.msleep((uint) delay);
+                    pthread_sleep.msleep((uint) delay);
 //                LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
 //                     (get_master_clock() - video->test_video_time));
-            }
+                }
 //            video->test_video_time = get_master_clock();
 
-            video->glThread->draw();
+                video->glThread->draw();
 
-            pthread_mutex_lock(&video->pause_mutex);
-            if (video->is_pause) {
-                pthread_cond_wait(&video->pause_cond, &video->pause_mutex);
+                pthread_mutex_lock(&video->pause_mutex);
+                if (video->is_pause) {
+                    pthread_cond_wait(&video->pause_cond, &video->pause_mutex);
+                }
+                pthread_mutex_unlock(&video->pause_mutex);
+
             }
-            pthread_mutex_unlock(&video->pause_mutex);
-
+            av_packet_free(&video_packet->avPacket);
+            free_packet(video_packet);
         }
-        av_packet_free(&video_packet->avPacket);
-        free_packet(video_packet);
     }
     end:
-    video->glThread->setParams(NULL, 0, 0);
+    video->glThread->setParams(nullptr, 0, 0);
     video->glThread->drawBackground();
-//    if (!video->has_audio && video->updateTimeFun) {
-//        video->updateTimeFun->jvm_detach_fun();
-//    }
     av_frame_free(&frame);
-    LOGI("videoProcess end video_pkt_list size: %d", video_pkt_list.size());
+    LOGI("videoProcess end video->pkt_list size: %ld", video->pkt_list.size());
     return 0;
 }
 
 
-int Video::open_stream() {
-    pthread_cond_init(&video_cond, NULL);
-    pthread_cond_init(&pause_cond, NULL);
-    pthread_mutex_init(&pause_mutex, NULL);
+int Video::open_stream(AVFormatContext *fmt_ctx) {
+    pthread_cond_init(&pause_cond, nullptr);
+    pthread_mutex_init(&pause_mutex, nullptr);
     int ret = open_codec_context(&stream_id, &av_dec_ctx,
                                  fmt_ctx, AVMEDIA_TYPE_VIDEO);
     if (ret >= 0) {
@@ -206,7 +185,7 @@ int Video::open_stream() {
         sws_context = sws_getContext(
                 av_dec_ctx->width, av_dec_ctx->height, av_dec_ctx->pix_fmt,
                 av_dec_ctx->width, av_dec_ctx->height, AV_PIX_FMT_RGBA,
-                SWS_BILINEAR, NULL, NULL, NULL);
+                SWS_BILINEAR, nullptr, nullptr, nullptr);
         if ((ret = av_image_alloc(dst_data, dst_line_size,
                                   av_dec_ctx->width, av_dec_ctx->height,
                                   AV_PIX_FMT_RGBA, 1)) < 0) {
@@ -227,12 +206,12 @@ void Video::pause() {
 }
 
 void Video::resume() {
-    LOGI("Video resume start");
+    LOGI("Video Resume start");
     pthread_mutex_lock(&pause_mutex);
     is_pause = false;
     pthread_cond_signal(&pause_cond);
     pthread_mutex_unlock(&pause_mutex);
-    LOGI("Video resume end");
+    LOGI("Video Resume end");
 }
 
 void Video::release() {
@@ -240,30 +219,29 @@ void Video::release() {
     pthread_sleep.interrupt();
     pthread_mutex_lock(&c_mutex);
     thread_finish = true;
-    pthread_cond_signal(&video_cond);
     pthread_cond_signal(&c_cond);
     pthread_mutex_unlock(&c_mutex);
     if (p_video_tid) {
         pthread_join(p_video_tid, 0);
     }
+    clearList();
     LOGI("video pthread_join done");
-    if (dst_data[0] != NULL) {
+    if (dst_data[0] != nullptr) {
         av_freep(&dst_data[0]);
-        dst_data[0] = NULL;
+        dst_data[0] = nullptr;
     }
-    if (sws_context != NULL) {
+    if (sws_context != nullptr) {
         sws_freeContext(sws_context);
-        sws_context = NULL;
+        sws_context = nullptr;
     }
     pthread_cond_destroy(&pause_cond);
-    pthread_cond_destroy(&video_cond);
     pthread_mutex_destroy(&pause_mutex);
     if (av_dec_ctx) {
 //        avcodec_close(av_dec_ctx);
         avcodec_free_context(&av_dec_ctx);
     }
     stream_id = 0;
-    av_stream = NULL;
-    av_dec_ctx = NULL;
-    LOGI("video release");
+    av_stream = nullptr;
+    av_dec_ctx = nullptr;
+    LOGI("video Release");
 }

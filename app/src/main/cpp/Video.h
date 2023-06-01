@@ -7,17 +7,19 @@
 
 #include "GLThread.h"
 #include "Audio.h"
-#include "AV.h"
+#include "BaseAV.h"
 #include "PthreadSleep.h"
 
-class Video : AV {
+class Video : BaseAV {
 public:
 
-    Video(GLThread* glThread);
+    Video(GLThread* glThread,AVClock* avClock);
 
     ~Video();
 
-    int open_stream();
+    int open_stream(AVFormatContext *fmt_ctx);
+
+    void putAvPacket(FPacket* pkt);
 
     void pause();
 
@@ -27,8 +29,7 @@ public:
 
     int stream_id = -1;
 
-    int view_width = 0;
-    int view_height = 0;
+    AVClock* avClock;
 
     AVCodecContext *av_dec_ctx = NULL;
 

@@ -251,7 +251,7 @@ typedef struct AVIOContext {
     unsigned char *checksum_ptr;
     unsigned long (*update_checksum)(unsigned long checksum, const uint8_t *buf, unsigned int size);
     /**
-     * Pause or resume playback for network streaming protocols - e.g. MMS.
+     * Pause or Resume playback for network streaming protocols - e.g. MMS.
      */
     int (*read_pause)(void *opaque, int pause);
     /**
@@ -764,11 +764,11 @@ const char *avio_enum_protocols(void **opaque, int output);
 const AVClass *avio_protocol_get_class(const char *name);
 
 /**
- * Pause and resume playing - only meaningful if using a network streaming
+ * Pause and Resume playing - only meaningful if using a network streaming
  * protocol (e.g. MMS).
  *
  * @param h     IO context from which to call the read_pause function pointer
- * @param pause 1 for pause, 0 for resume
+ * @param pause 1 for Pause, 0 for Resume
  */
 int     avio_pause(AVIOContext *h, int pause);
 

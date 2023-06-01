@@ -4,13 +4,8 @@
 
 #include "Audio.h"
 
-int Audio::must_feed = 0;
-pthread_mutex_t Audio::a_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t Audio::a_cond = PTHREAD_COND_INITIALIZER;
-
-Audio::Audio():pause_cond(),pause_mutex() {
-    LOGI("Audio must_feed: %d ", must_feed);
-    must_feed = 0;
+Audio::Audio(AVClock *avClock) : avClock(avClock), pause_cond(), pause_mutex() {
+    thread_finish = false;
 }
 
 int Audio::synchronize_audio(int nb_samples) {
@@ -18,7 +13,7 @@ int Audio::synchronize_audio(int nb_samples) {
     double diff_ms;
     double nb_time_ms;
 //    LOGI("get_audio_clock: %f get_master_clock: %f nb_samples: %d", get_audio_clock(), get_master_clock(), nb_samples);
-    diff_ms = get_audio_pts_clock() - get_master_clock();
+    diff_ms = avClock->get_audio_pts_clock() - avClock->get_master_clock();
     nb_time_ms = 1.0 * nb_samples / av_dec_ctx->sample_rate * 1000; // ms
 //    LOGI("diff_ms: %f nb_time_ms: %f", diff_ms, nb_time_ms);
     if (fabs(diff_ms) > nb_time_ms * 0.2) { // 超过阀值
@@ -63,121 +58,80 @@ uint8_t **Audio::getDstData() {
     }
 }
 
-void Audio::slBufferCallback() {
-//    LOGI("slBufferCallback start")
-    pthread_mutex_lock(&a_mutex);
-    if (must_feed != -1) {
-        must_feed = 1;
-        pthread_cond_signal(&a_cond); //通知
-        pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
-    }
-    pthread_mutex_unlock(&a_mutex);
-    //在这里之后必须要有数据
-//    LOGI("slBufferCallback end")
+void Audio::putAvPacket(FPacket *pkt) {
+    pthread_mutex_lock(&c_mutex);
+    pkt_list.push_back(pkt);
+    pthread_cond_signal(&c_cond);
+    pthread_mutex_unlock(&c_mutex);
 }
-
 
 void *Audio::audioProcess(void *arg) {
     int ret = 0;
     int wanted_nb_samples = 0;
-    bool checkout_time = false;
     uint8_t **cur_dst_data;
-    FPacket *audio_packet = NULL;
+    FPacket *audio_packet = nullptr;
     Audio *audio = (Audio *) arg;
     AVFrame *frame = av_frame_alloc();
     LOGI("audioProcess: run!!!");
-    while (true) {
+    while (!audio->thread_finish) {
         do {
-//            LOGI("audio_pkt_list size: %d", audio_pkt_list.size())
-            pthread_mutex_lock(&c_mutex);
-            if (!audio_pkt_list.empty()) {
-                audio_packet = audio_pkt_list.front();
-                audio_pkt_list.pop_front();
-                if (audio_pkt_list.size() <= 1) {
-                    pthread_cond_broadcast(&c_cond);
-                }
+            audio_packet = nullptr;
+            pthread_mutex_lock(&audio->c_mutex);
+            if (!audio->pkt_list.empty()) {
+                audio_packet = audio->pkt_list.front();
+                audio->pkt_list.pop_front();
             } else {
-                if (!audio->thread_finish) {
-                    pthread_cond_broadcast(&c_cond);
-                    pthread_cond_wait(&audio_cond, &c_mutex);
-                } else {
-                    LOGI("audioProcess: end");
-                    pthread_mutex_unlock(&c_mutex);
-                    goto end; // 线程不再运行，结束
-                }
-                if (!audio_pkt_list.empty()) {
-                    audio_packet = audio_pkt_list.front();
-                    audio_pkt_list.pop_front();
-                } else {
-                    if (audio->thread_finish) {
-                        LOGI("audioProcess: end");
-                        pthread_mutex_unlock(&c_mutex);
-                        goto end;// 线程不再运行，结束
-                    }
+                pthread_cond_wait(&audio->c_cond, &audio->c_mutex);
+                if (!audio->pkt_list.empty()) {
+                    audio_packet = audio->pkt_list.front();
+                    audio->pkt_list.pop_front();
                 }
             }
-            pthread_mutex_unlock(&c_mutex);
-        } while (audio_packet == NULL);
-        if (audio_packet->checkout_time) {
-            checkout_time = true;
-//            pthread_mutex_lock(&seek_mutex);
-//            avcodec_flush_buffers(audio->av_dec_ctx);
-//            swr_convert(audio->swr_context, frame->data, frame->sample_rate, NULL, 0);
-//            pthread_mutex_unlock(&seek_mutex);
-        }
-        // 解码
-//        pthread_mutex_lock(&seek_mutex);
-        ret = avcodec_send_packet(audio->av_dec_ctx, audio_packet->avPacket);
-//        pthread_mutex_unlock(&seek_mutex);
-        if (ret < 0) {
-            LOGE("Error audio sending a packet for decoding audio_pkt_list size: %d",
-                 audio_pkt_list.size());
-            av_packet_free(&audio_packet->avPacket);
-            free_packet(audio_packet);
-            LOGE("Error Audio end");
-            break;
-        }
-        while (ret >= 0) {
+            pthread_mutex_unlock(&audio->c_mutex);
+        } while (audio_packet == nullptr && !audio->thread_finish);
+        if (audio_packet != nullptr) {
+            if (audio_packet->checkout_time) {
+                avcodec_flush_buffers(audio->av_dec_ctx);
+            }
+            ret = avcodec_send_packet(audio->av_dec_ctx, audio_packet->avPacket);
+            if (ret < 0) {
+                LOGE("Error audio sending a packet for decoding pkt_list size: %ld",
+                     audio->pkt_list.size());
+                av_packet_free(&audio_packet->avPacket);
+                free_packet(audio_packet);
+                LOGE("Error Audio end");
+                break;
+            }
+            while (ret >= 0) {
 //            audio->test_audio_time = (av_gettime_relative() / 1000.0);
-            ret = avcodec_receive_frame(audio->av_dec_ctx, frame);
+                ret = avcodec_receive_frame(audio->av_dec_ctx, frame);
 //            LOGI("avcodec_receive_frame cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
 
-            if (ret == AVERROR(EAGAIN)) {
+                if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
-                break;
-            } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) ||
-                       ret == AVERROR_INPUT_CHANGED) {
-                LOGE("audio some err!");
-                break;
-            } else if (ret < 0) {
-                LOGE("audio legitimate decoding errors");
-                break;
-            }
-            double pts = av_q2d(audio->av_stream->time_base) * frame->pts * 1000.0;
-            if (checkout_time) {
-                checkout_time = false;
-            }
+                    break;
+                } else if (ret == AVERROR_EOF || ret == AVERROR(EINVAL) ||
+                           ret == AVERROR_INPUT_CHANGED) {
+                    LOGE("audio some err!");
+                    break;
+                } else if (ret < 0) {
+                    LOGE("audio legitimate decoding errors");
+                    break;
+                }
+                double pts = av_q2d(audio->av_stream->time_base) * frame->pts * 1000.0;
 
-            LOGI("audio pts: %f get_master_clock: %f", pts, get_master_clock());
-//            audio->test_audio_time = (av_gettime_relative() / 1000.0);
+                LOGI("audio pts: %f get_master_clock: %f", pts, audio->avClock->get_master_clock());
 
-            ff_sec_time = (int32_t) (pts / 1000);
+                audio->avClock->ff_sec_time = (int32_t) (pts / 1000);
 //            LOGI("updateTimeFun cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
 
-            ff_last_sec_time = ff_sec_time;
+                wanted_nb_samples = frame->nb_samples;
+                cur_dst_data = audio->getDstData();
+                ret = swr_convert(audio->swr_context, cur_dst_data, wanted_nb_samples,
+                                  (const uint8_t **) frame->data, frame->nb_samples);
 
-            wanted_nb_samples = frame->nb_samples;
-            cur_dst_data = audio->getDstData();
-            ret = swr_convert(audio->swr_context, cur_dst_data, wanted_nb_samples,
-                              (const uint8_t **) frame->data, frame->nb_samples);
-
-            pthread_mutex_lock(&a_mutex);
-            if (must_feed == 0) {
-                pthread_cond_wait(&a_cond, &a_mutex); // 等待回调
-            }
-            must_feed = 0;
-            // 到这里必须要有sl数据
-            set_audio_clock(pts);// ms
+                // 到这里必须要有sl数据
+                audio->avClock->set_audio_clock(pts);// ms
 //            LOGI("audio pts: %f get_master_clock: %f", pts, get_master_clock());
 //            wanted_nb_samples = synchronize_audio(frame->nb_samples);
 //            if (!test) {
@@ -200,37 +154,34 @@ void *Audio::audioProcess(void *arg) {
 //                    continue;
 //                }
 //            }
-            if (ret > 0) {
-                audio->openSL.setEnqueueBuffer(*cur_dst_data, (uint32_t) ret * 4);
+                if (ret > 0) {
+                    audio->openSL.setEnqueueBuffer(*cur_dst_data, (uint32_t) ret * 4);
 //                LOGI("swr_convert len: %d wanted_nb_samples: %d", ret, wanted_nb_samples);
-            } else {
-                LOGE("swr_convert err = %d", ret);
-            }
-            pthread_cond_signal(&a_cond);
-            pthread_mutex_unlock(&a_mutex);
+                } else {
+                    LOGE("swr_convert err = %d", ret);
+                }
 
-            pthread_mutex_lock(&audio->pause_mutex);
-            if (audio->is_pause) {
-                pthread_cond_wait(&audio->pause_cond, &audio->pause_mutex);
+                pthread_mutex_lock(&audio->pause_mutex);
+                if (audio->is_pause) {
+                    pthread_cond_wait(&audio->pause_cond, &audio->pause_mutex);
+                }
+                pthread_mutex_unlock(&audio->pause_mutex);
             }
-            pthread_mutex_unlock(&audio->pause_mutex);
         }
         av_packet_free(&audio_packet->avPacket);
         free_packet(audio_packet);
-        audio_packet = NULL;
+        audio_packet = nullptr;
     }
     end:
     av_frame_free(&frame);
-    LOGI("audioProcess end audio_pkt_list size: %d", audio_pkt_list.size());
+    LOGI("audioProcess end pkt_list size: %ld", audio->pkt_list.size());
     return 0;
 }
 
-int Audio::open_stream() {
-    static SLConfigure slConfigure;
+int Audio::open_stream(AVFormatContext *fmt_ctx) {
     stream_id = -1;
-    pthread_cond_init(&audio_cond, NULL);
-    pthread_cond_init(&pause_cond, NULL);
-    pthread_mutex_init(&pause_mutex, NULL);
+    pthread_cond_init(&pause_cond, nullptr);
+    pthread_mutex_init(&pause_mutex, nullptr);
     int ret = open_codec_context(&stream_id, &av_dec_ctx,
                                  fmt_ctx, AVMEDIA_TYPE_AUDIO);
     LOGI("stream_id: %d", stream_id);
@@ -249,33 +200,30 @@ int Audio::open_stream() {
         if (!sr) {
             out_sample_rate = 44100;
         }
-        int len_1 = av_samples_alloc(&dst_data_1, NULL,
+        int len_1 = av_samples_alloc(&dst_data_1, nullptr,
                                      av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                                      out_sample_rate,
                                      AV_SAMPLE_FMT_S16, 1);
-        av_samples_alloc(&dst_data_2, NULL,
+        av_samples_alloc(&dst_data_2, nullptr,
                          av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
                          out_sample_rate,
                          AV_SAMPLE_FMT_S16, 1);
         LOGI("out_sample_rate: %d s: %d nb_channels:%d", out_sample_rate, len_1,
              av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO));
-        slConfigure.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
-        slConfigure.sampleRate = out_sample_rate;
-        slConfigure.signSlBufferCallback = slBufferCallback;
-        ret = openSL.createPlayer(&slConfigure);
+        ret = openSL.createPlayer(nullptr);
         if (ret == 0) {
             swr_context = swr_alloc();
             swr_alloc_set_opts(swr_context,
                                AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, out_sample_rate,
                                av_dec_ctx->channel_layout, av_dec_ctx->sample_fmt,
                                av_dec_ctx->sample_rate,
-                               1, NULL);
+                               1, nullptr);
             ret = swr_init(swr_context);
         }
         if (ret == 0) {
             LOGI("swr_init success create Thread");
             openSL.play();
-            pthread_create(&p_audio_tid, NULL, audioProcess, this);
+            pthread_create(&p_audio_tid, nullptr, audioProcess, this);
         } else {
             stream_id = -1;
             LOGE("swr_init failed");
@@ -293,57 +241,50 @@ void Audio::pause() {
 }
 
 void Audio::resume() {
-    LOGI("Audio resume start");
+    LOGI("Audio Resume start");
     pthread_mutex_lock(&pause_mutex);
     is_pause = false;
     pthread_cond_signal(&pause_cond);
     pthread_mutex_unlock(&pause_mutex);
-    LOGI("Audio resume end");
+    LOGI("Audio Resume end");
 }
 
 void Audio::release() {
     LOGI("audio pthread_join wait");
     pthread_mutex_lock(&c_mutex);
     thread_finish = true;
-    pthread_cond_broadcast(&audio_cond);
     pthread_cond_signal(&c_cond);
     pthread_mutex_unlock(&c_mutex);
     if (p_audio_tid) {
         pthread_join(p_audio_tid, 0);
     }
-    LOGI("audio openSL.unlock");
-    pthread_mutex_lock(&a_mutex);
-    must_feed = -1;
-    pthread_cond_broadcast(&a_cond);
-    pthread_mutex_unlock(&a_mutex);
-    LOGI("audio openSL.release");
+    clearList();
     // 内部必定有等待 slBufferCallback结束的，应该是让内部线程结束，所以释放之前要确保不堵塞它的线程
     // 先解锁，再释放
     openSL.release();
     LOGI("audio pthread_join done");
-    if (swr_context != NULL) {
+    if (swr_context != nullptr) {
         swr_close(swr_context);
         swr_free(&swr_context);
-        swr_context = NULL;
+        swr_context = nullptr;
     }
-    if (dst_data_1 != NULL) {
+    if (dst_data_1 != nullptr) {
         av_freep(&dst_data_1);
-        dst_data_1 = NULL;
+        dst_data_1 = nullptr;
     }
-    if (dst_data_2 != NULL) {
+    if (dst_data_2 != nullptr) {
         av_freep(&dst_data_2);
-        dst_data_2 = NULL;
+        dst_data_2 = nullptr;
     }
     if (av_dec_ctx) {
-//        avcodec_close(av_dec_ctx);
         avcodec_free_context(&av_dec_ctx);
-        av_dec_ctx = NULL;
+        av_dec_ctx = nullptr;
     }
-    pthread_cond_destroy(&audio_cond);
+    pthread_cond_destroy(&c_cond);
     pthread_mutex_destroy(&pause_mutex);
     pthread_cond_destroy(&pause_cond);
     stream_id = 0;
-    av_stream = NULL;
-    av_dec_ctx = NULL;
-    LOGI("audio release");
+    av_stream = nullptr;
+    av_dec_ctx = nullptr;
+    LOGI("audio Release");
 }

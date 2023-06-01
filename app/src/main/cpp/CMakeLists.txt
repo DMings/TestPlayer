@@ -9,13 +9,16 @@ add_library(
         OpenGL.cpp
         GLRender.cpp
         GLUtils.cpp
-        FFmpeg.cpp
+        FPacket.c
+        AVClock.cpp
+        BaseAV.cpp
         Audio.cpp
         Video.cpp
         FPlayer.cpp
         PthreadSleep.cpp
         GLThread.cpp
         AudioSpeed.cpp
+        FPlayerJni.cpp
         )
 find_library(log-lib log)
 set(ffmepgSrc ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI})

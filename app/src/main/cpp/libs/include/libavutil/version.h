@@ -45,9 +45,9 @@
  * avoid aliassing different git master checkouts.
  * Starting with FFmpeg 3.2, the released library versions will occupy
  * a separate MAJOR.MINOR that is not used on the master development branch.
- * That is if we branch a release of master 55.10.123 we will bump to 55.11.100
- * for the release and master will continue at 55.12.100 after it. Each new
- * point release will then bump the MICRO improving the usefulness of the lib
+ * That is if we branch a Release of master 55.10.123 we will bump to 55.11.100
+ * for the Release and master will continue at 55.12.100 after it. Each new
+ * point Release will then bump the MICRO improving the usefulness of the lib
  * versions.
  *
  * @{

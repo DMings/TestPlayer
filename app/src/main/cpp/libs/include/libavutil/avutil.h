@@ -171,7 +171,7 @@
 unsigned avutil_version(void);
 
 /**
- * Return an informative version string. This usually is the actual release
+ * Return an informative version string. This usually is the actual Release
  * version number or a git commit description. This string has no fixed format
  * and can change any time. It should never be parsed by code.
  */

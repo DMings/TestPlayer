@@ -47,12 +47,12 @@ static void slBufferCallback(SLAndroidSimpleBufferQueueItf bq, void *context) {
 }
 
 void OpenSL::setEnqueueBuffer(uint8_t *buffer, uint32_t bufferSize) {
-    SLuint32 pState;
-    (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);
-    if (pState == SL_PLAYSTATE_PLAYING) {
-        this->buffer = buffer;
-        this->bufferSize = bufferSize;
-    }
+//    SLuint32 pState;
+//    (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);
+//    if (pState == SL_PLAYSTATE_PLAYING) {
+//        this->buffer = buffer;
+//        this->bufferSize = bufferSize;
+//    }
 //    if (bqPlayerPlay != NULL && bqPlayerBufferQueue != NULL) {
 //        SLuint32 pState;
 //        (*bqPlayerPlay)->GetPlayState(bqPlayerPlay, &pState);

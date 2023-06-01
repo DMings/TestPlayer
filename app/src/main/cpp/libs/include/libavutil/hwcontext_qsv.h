@@ -42,7 +42,7 @@ typedef struct AVQSVDeviceContext {
      *
      * Filled by the user before calling av_hwdevice_ctx_init() and should be
      * cast to mfxLoader handle. Deallocating the AVHWDeviceContext will always
-     * release this interface.
+     * Release this interface.
      */
     void *loader;
 } AVQSVDeviceContext;

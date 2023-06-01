@@ -54,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(MainActivity.this, "当前无视频可播放", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                playOrPause(false);
+                playOrPause();
             }
         });
         mFPlayer = new FPlayer(mPlaySv);
@@ -127,11 +127,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void playOrPause(final boolean isChangeFile) {
+    private void playOrPause() {
         PermissionFragment.checkPermission(this, new Runnable() {
             @Override
             public void run() {
-                if (mFPlayer.getPlayState() == FPlayer.PlayStatus.PLAYING && !isChangeFile) {
+                if (mFPlayer.getPlayState() == FPlayer.PlayStatus.PLAYING) {
                     if (!mIsPlaying) {
                         mIsPlaying = true;
                         mFPlayer.onResume();
@@ -163,13 +163,6 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
                     FLog.i("ret=" + ret);
-                    if (ret != FPlayer.PlayStatus.IDLE) {
-//                        if (ret == FPlayer.PlayStatus.PLAYING) {
-//                            Toast.makeText(MainActivity.this, "视频切换中", Toast.LENGTH_SHORT).show();
-//                        } else if (ret == FPlayer.PlayStatus.PREPARE) {
-//                            Toast.makeText(MainActivity.this, "视频准备中", Toast.LENGTH_SHORT).show();
-//                        }
-                    }
                 }
             }
         });

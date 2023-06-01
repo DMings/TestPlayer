@@ -31,8 +31,10 @@ public class FPlayer implements SurfaceHolder.Callback {
     private Handler mMainHandle = new Handler(Looper.getMainLooper());
     private int mSurfaceWidth;
     private int mSurfaceHeight;
+    private long mPtr;
 
     public FPlayer(SurfaceView surfaceView) {
+        mPtr = newInstance();
         surfaceView.getHolder().addCallback(this);
 //        mEglHelper = new EglHelper();
         mPlayThread = new HandlerThread("FPlayer");
@@ -59,15 +61,15 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public void onResume() {
-        resume();
+        resume(mPtr);
     }
 
     public void onPause() {
-        pause();
+        pause(mPtr);
     }
 
     public void onDestroy() {
-        release();
+        release(mPtr);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
             mPlayThread.quitSafely();
         } else {
@@ -78,20 +80,21 @@ public class FPlayer implements SurfaceHolder.Callback {
         } catch (InterruptedException e) {
             FLog.e("Join encountered an error!");
         }
+        deleteInstance(mPtr);
     }
 
     public long getDurationTime() {
-        return get_current_time();
+        return get_current_time(mPtr);
     }
 
     public int getPlayState() {
-        int s = get_play_state();
+        int s = get_play_state(mPtr);
         Log.i("DMFF", "getPlayState:     " + s);
         return s;
     }
 
     private void changeToPlay() {
-        release();
+        release(mPtr);
         startPlay();
     }
 
@@ -111,14 +114,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         @Override
         public void run() {
             mControlStatus.set(PlayStatus.PLAYING);
-            int ret = FPlayer.play(mSrcPath, mSurfaceWidth, mSurfaceHeight, new OnProgressListener() {
-                @Override
-                public void onProgress(int curTime, int totalTime) {
-                    if (mOnProgressListener != null) {
-                        mOnProgressListener.onProgress(curTime, totalTime);
-                    }
-                }
-            });
+            int ret = FPlayer.play(mPtr, mSrcPath);
             FLog.i("PlayStatus.IDLE");
             mControlStatus.set(PlayStatus.IDLE);
             if (ret < 0) {
@@ -135,7 +131,7 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        surface_created(holder.getSurface());
+        surface_created(mPtr, holder.getSurface());
     }
 
     @Override
@@ -143,34 +139,37 @@ public class FPlayer implements SurfaceHolder.Callback {
         mSurfaceWidth = width;
         mSurfaceHeight = height;
         Log.i("OpenGL", "OpenGL: width: " + width + " height: " + height);
-        surface_changed(holder.getSurface(), width, height);
+        surface_changed(mPtr, holder.getSurface(), width, height);
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        surface_destroyed();
+        surface_destroyed(mPtr);
     }
 
     static {
         System.loadLibrary("fplayer");
     }
 
-    private static native int play(String path, int width, int height, OnProgressListener onProgressListener);
+    private static native long newInstance();
 
-    private static native long get_current_time();
+    private static native int play(long ptr, String path);
 
-    private static native void pause();
+    private static native long get_current_time(long ptr);
 
-    private static native void resume();
+    private static native void pause(long ptr);
 
-    private static native int get_play_state();
+    private static native void resume(long ptr);
 
-    private static native void surface_created(Surface surface);
+    private static native int get_play_state(long ptr);
 
-    private static native void surface_changed(Surface surface, int width, int height);
+    private static native void surface_created(long ptr, Surface surface);
 
-    private static native void surface_destroyed();
+    private static native void surface_changed(long ptr, Surface surface, int width, int height);
 
-    private static native void release();
+    private static native void surface_destroyed(long ptr);
 
+    private static native void release(long ptr);
+
+    private static native void deleteInstance(long ptr);
 }
