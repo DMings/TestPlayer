@@ -78,9 +78,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public int getPlayState() {
-        int s = mControlStatus.get();
-        FLog.i("getPlayState:     " + s);
-        return s;
+        return mControlStatus.get();
     }
 
     private final Runnable mStartRunnable = new Runnable() {

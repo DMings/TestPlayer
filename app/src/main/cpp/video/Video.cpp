@@ -52,10 +52,12 @@ uint Video::synchronize_video(double pkt_duration) { // us
 }
 
 void Video::putAvPacket(FPacket *pkt) {
-    pthread_mutex_lock(&c_mutex);
-    pkt_list.push_back(pkt);
-    pthread_cond_signal(&c_cond);
-    pthread_mutex_unlock(&c_mutex);
+    if (stream_id != -1) {
+        pthread_mutex_lock(&c_mutex);
+        pkt_list.push_back(pkt);
+        pthread_cond_signal(&c_cond);
+        pthread_mutex_unlock(&c_mutex);
+    }
 }
 
 void *Video::videoProcess(void *arg) {
@@ -174,7 +176,7 @@ int Video::open_stream(AVFormatContext *fmt_ctx) {
 //        av_dec_ctx->thread_count = nb_cpu_s;
 //        LOGI("nb_cpu_s: %d", nb_cpu_s);
         av_stream = fmt_ctx->streams[stream_id];
-        LOGI("ffplay -f rawvideo -pix_fmt %s -video_size %d x %d",
+        LOGI("Video -pix_fmt %s -video_size %d x %d",
              av_get_pix_fmt_name(av_dec_ctx->pix_fmt), av_dec_ctx->width, av_dec_ctx->height);
     } else {
         stream_id = -1;

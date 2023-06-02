@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 add_library(
         fplayer
         SHARED
-        audio/render/OpenSL.cpp
         video/render/OpenGL.cpp
         video/render/GLRender.cpp
         video/render/GLUtils.cpp
@@ -18,7 +17,8 @@ add_library(
         utils/PthreadSleep.cpp
         video/render/GLThread.cpp
         audio/render/AudioSpeed.cpp
-        audio/render/record_audio.cpp
+        audio/render/AudioPlay.cpp
+        audio/render/PlayAudioBuffer.cpp
 
         utils/time_utils.cpp
 

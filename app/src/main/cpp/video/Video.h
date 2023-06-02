@@ -40,8 +40,8 @@ private:
     uint8_t *dst_data[4];
     int dst_line_size[4];
     pthread_t p_video_tid = 0;
-    bool thread_finish = false;
-    bool is_pause = false;
+    std::atomic_bool thread_finish = false;
+    std::atomic_bool is_pause = false;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
 

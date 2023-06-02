@@ -1,0 +1,1 @@
+C:\Users\admin\AppData\Local\Android\Sdk\ndk\22.1.7171670\ndk-stack -sym E:\AndroidProject\TestPlayer\app\build\intermediates\cmake\debug\obj\arm64-v8a -dump log.txt

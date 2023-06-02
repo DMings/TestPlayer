@@ -6,7 +6,7 @@
 #ifndef TESTPLAYER_AUDIO_H
 #define TESTPLAYER_AUDIO_H
 
-#include "render/OpenSL.h"
+#include "render/AudioPlay.h"
 #include "../av/BaseAV.h"
 #include "../utils/PthreadSleep.h"
 
@@ -32,20 +32,16 @@ public:
     AVStream *av_stream = NULL;
     AVCodecContext *av_dec_ctx = NULL;
 private:
+    bool isSampleRateValid(int sampleRate);
+
     static void *audioProcess(void *arg);
 
-    uint8_t **getDstData();
-
-    bool chooseDstData = false;
-    OpenSL openSL;
-    SwrContext *swr_context = NULL;
-    uint8_t *dst_data_1 = NULL;
-    uint8_t *dst_data_2 = NULL;
+    AudioPlay* playAudio;
     pthread_t p_audio_tid = 0;
-    bool thread_finish = false;
+    std::atomic_bool thread_finish = false;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
-    bool is_pause = false;
+    std::atomic_bool is_pause = false;
 };
 
 

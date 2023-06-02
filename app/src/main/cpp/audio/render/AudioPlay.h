@@ -7,25 +7,25 @@
 
 #include "oboe/Oboe.h"
 #include "../../utils/time_utils.h"
-#include "audio_data_callback.h"
+#include "PlayAudioBuffer.h"
 
-class RecordAudio {
+class AudioPlay {
 public:
-    RecordAudio(int sampleRate, int channels);
+    AudioPlay(int sampleRate, int channels);
 
-    void SetCallback(AudioDataCallback *audioDataCallback);
+    void PutData(uint8_t *data, int dataSize);
 
     void Start();
 
     void Stop();
 
-    ~RecordAudio();
+    ~AudioPlay();
 
 private:
     class MyDataCallback : public oboe::AudioStreamDataCallback {
 
     public:
-        MyDataCallback(RecordAudio *parent) : mParent(parent) {}
+        MyDataCallback(AudioPlay *parent) : mParent(parent) {}
 
         oboe::DataCallbackResult onAudioReady(
                 oboe::AudioStream *audioStream,
@@ -33,13 +33,13 @@ private:
                 int32_t numFrames) override;
 
     private:
-        RecordAudio *mParent;
+        AudioPlay *mParent;
 
     };
 
     class MyErrorCallback : public oboe::AudioStreamErrorCallback {
     public:
-        MyErrorCallback(RecordAudio *parent) : mParent(parent) {}
+        MyErrorCallback(AudioPlay *parent) : mParent(parent) {}
 
         virtual ~MyErrorCallback() {
         }
@@ -47,7 +47,7 @@ private:
         void onErrorAfterClose(oboe::AudioStream *oboeStream, oboe::Result error) override;
 
     private:
-        RecordAudio *mParent;
+        AudioPlay *mParent;
     };
 
     std::shared_ptr<oboe::AudioStream> mStream;
@@ -56,10 +56,10 @@ private:
 
     static constexpr int kChannelCount = 2;
 
-    AudioDataCallback *audioDataCallback_;
+    PlayAudioBuffer playAudioBuffer_;
 
     long long mTestTime;
-
+    FILE *audio_dst_file = NULL;
     void Restart();
 };
 

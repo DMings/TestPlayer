@@ -1,0 +1,23 @@
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  Build fingerprint: 'Xiaomi/thyme/thyme:13/TKQ1.220829.002/V14.0.4.0.TGACNXM:user/release-keys'
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  Revision: '0'
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  ABI: 'arm64'
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  Timestamp: 2023-06-02 14:56:26.032784862+0800
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  Process uptime: 3s
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  Cmdline: com.dming.testplayer
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  pid: 5925, tid: 5988, name: AudioTrack  >>> com.dming.testplayer <<<
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  uid: 10024
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  Cause: null pointer dereference
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x0  0000000000000000  x1  b400007ca4222bc0  x2  0000000000000c00  x3  0000000000000000
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x4  b400007ca42237c0  x5  0000000000000c00  x6  0000000000000000  x7  0000000000000000
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x8  0000000000000c00  x9  0000000000000000  x10 b400007ca4222bc0  x11 889f1b418205ca79
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x12 b400007d1b364400  x13 0000000000000000  x14 00001c679663322a  x15 00ffffffffffffff
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x16 0000007cab633798  x17 0000007dd1ee50e0  x18 0000007c9f432000  x19 0000007ca26b8748
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x20 0000000000000000  x21 0000000000000000  x22 0000000000000000  x23 b400007cb8ad6c80
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x24 0000000000000000  x25 0000000000000000  x26 0000000000000c00  x27 0000000000000000
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      x28 0000000000000300  x29 0000007ca26b87e0
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A      lr  0000007cab37c96c  sp  0000007ca26b86e0  pc  0000007dd1ee5068  pst 0000000020001000
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A  backtrace:
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A        #00 pc 0000000000089068  /apex/com.android.runtime/lib64/bionic/libc.so (__memcpy+248) (BuildId: 2bb0d7188c0db2e8beecb24658ba9d71)
+2023-06-02 14:56:26.271  5998-5998  DEBUG           crash_dump64        A        #01 pc 000000000029f968  /data/app/~~Q4N46BWYr-9vzy80d0DZ_Q==/com.dming.testplayer-FaOJGN4xEg2rbvVtfqTHQw==/base.apk!libfplayer.so (BuildId: 5d55972328a0b5f640feb1f3ea355d3df57fb7af)
