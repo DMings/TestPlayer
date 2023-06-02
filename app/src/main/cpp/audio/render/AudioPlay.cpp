@@ -16,11 +16,8 @@ DataCallbackResult AudioPlay::MyDataCallback::onAudioReady(
          (GetCurrentTimeMs() - mParent->mTestTime));
     mParent->mTestTime = GetCurrentTimeMs();
     auto *data = static_cast<uint8_t *>(audioData);
-    int dataSize = mParent->playAudioBuffer_.GetData(&data,
-                                                     numFrames * audioStream->getBytesPerFrame());
+    int dataSize = mParent->playAudioBuffer_.GetData(&data, numFrames);
     if (dataSize > 0) {
-        fwrite(data, 1, dataSize,
-               mParent->audio_dst_file);
         return DataCallbackResult::Continue;
     } else {
         LOGE("playAudioBuffer_.GetData: %d", dataSize);
@@ -60,14 +57,13 @@ AudioPlay::AudioPlay(int sampleRate, int channels) : playAudioBuffer_(sampleRate
     LOGI("getBytesPerFrame: %d ", mStream->getBytesPerFrame());
     LOGI("Open stream: %s ", convertToText(r));
     mTestTime = 0;
-    audio_dst_file = fopen("/sdcard/Android/data/com.dming.testplayer/files/Movies/audio2.pcm", "wb");
 }
 
-void AudioPlay::PutData(uint8_t *data, int dataSize) {
-    if (dataSize == 0) {
+void AudioPlay::PutData(uint8_t *data, int nbSamples) {
+    if (nbSamples == 0) {
         return;
     }
-    playAudioBuffer_.PutData(data, dataSize);
+    playAudioBuffer_.PutData(data, nbSamples);
 }
 
 void AudioPlay::Start() {
@@ -99,8 +95,6 @@ void AudioPlay::Stop() {
 
 AudioPlay::~AudioPlay() {
     LOGI("~RecordAudio");
-    if (audio_dst_file)
-        fclose(audio_dst_file);
     StreamState next = StreamState::Unknown;
     constexpr int kTimeoutInNanos = 1000 * kNanosPerMillisecond;
     mStream->waitForStateChange(StreamState::Stopping, &next, kTimeoutInNanos);

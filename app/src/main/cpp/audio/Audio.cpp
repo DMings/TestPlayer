@@ -115,9 +115,7 @@ void *Audio::audioProcess(void *arg) {
 
                 wanted_nb_samples = frame->nb_samples;
                 if (audio->playAudio) {
-                    audio->playAudio->PutData(frame->data[0],
-                                              frame->nb_samples *
-                                              audio->av_dec_ctx->ch_layout.nb_channels * 2);
+                    audio->playAudio->PutData(frame->data[0], frame->nb_samples);
                 }
 
                 // 到这里必须要有sl数据

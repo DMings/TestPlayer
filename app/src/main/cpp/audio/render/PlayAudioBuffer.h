@@ -19,9 +19,9 @@ class PlayAudioBuffer {
 public:
     PlayAudioBuffer(int sampleRate, int channels);
 
-    void PutData(uint8_t *data, int dataSize);
+    void PutData(uint8_t *data, int nbSamples);
 
-    int GetData(uint8_t **data, int dataSize);
+    int GetData(uint8_t **data, int nbSamples);
 
     void NotifyFinish();
 
@@ -38,7 +38,7 @@ private:
     bool finish_;
     std::list<uint8_t *> memPool_;
 
-    int AvAudioFifoWrite(void **inputData, int dataSize);
+    int AvAudioFifoWrite(void **inputData, int nbSamples);
 
     int AvAudioFifoRead(uint8_t **data, int nbSamples);
 

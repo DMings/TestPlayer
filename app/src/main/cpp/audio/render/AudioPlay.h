@@ -59,7 +59,7 @@ private:
     PlayAudioBuffer playAudioBuffer_;
 
     long long mTestTime;
-    FILE *audio_dst_file = NULL;
+
     void Restart();
 };
 

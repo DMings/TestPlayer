@@ -19,9 +19,9 @@ PlayAudioBuffer::PlayAudioBuffer(int sampleRate, int channels) {
     LOGI("PlayAudioBuffer nb_buffers: %d", nb_buffers);
 }
 
-void PlayAudioBuffer::PutData(uint8_t *data, int dataSize) {
+void PlayAudioBuffer::PutData(uint8_t *data, int nbSamples) {
     std::unique_lock<std::mutex> lock(mtx_);
-    int ret = AvAudioFifoWrite(reinterpret_cast<void **>(&data), dataSize);
+    int ret = AvAudioFifoWrite(reinterpret_cast<void **>(&data), nbSamples);
     if (ret < 0) {
         LOGI("av_audio_fifo_write: %s", av_err2str(ret));
     }
@@ -29,14 +29,14 @@ void PlayAudioBuffer::PutData(uint8_t *data, int dataSize) {
 }
 
 
-int PlayAudioBuffer::GetData(uint8_t **data, int dataSize) {
-    if (dataSize == 0) {
+int PlayAudioBuffer::GetData(uint8_t **data, int nbSamples) {
+    if (nbSamples == 0) {
         return 0;
     }
     while (true) {
-        int nbSamples = AvAudioFifoNbSamples();
-        if (nbSamples >= dataSize) {
-            int ret = AvAudioFifoRead(data, dataSize);
+        int totalNbSamples = AvAudioFifoNbSamples();
+        if (totalNbSamples >= nbSamples) {
+            int ret = AvAudioFifoRead(data, nbSamples);
             if (ret < 0) {
                 LOGE("ERROR: AvAudioFifoRead failed!");
                 return -1;
@@ -45,8 +45,8 @@ int PlayAudioBuffer::GetData(uint8_t **data, int dataSize) {
             }
         } else {
             std::unique_lock<std::mutex> lock(mtx_);
-            nbSamples = AvAudioFifoNbSamples();
-            if (nbSamples >= dataSize) {
+            totalNbSamples = AvAudioFifoNbSamples();
+            if (totalNbSamples >= nbSamples) {
                 continue;
             }
             cv_.wait(lock);
@@ -58,10 +58,9 @@ int PlayAudioBuffer::GetData(uint8_t **data, int dataSize) {
     return -1;
 }
 
-int PlayAudioBuffer::AvAudioFifoWrite(void **inputData, int dataSize) {
+int PlayAudioBuffer::AvAudioFifoWrite(void **inputData, int nbSamples) {
     std::lock_guard<std::mutex> lock(dataMtx_);
-    return av_audio_fifo_write(audioFifo_, (void **) inputData,
-                               dataSize / channels_ / sampleByte_);
+    return av_audio_fifo_write(audioFifo_, (void **) inputData, nbSamples);
 }
 
 int PlayAudioBuffer::AvAudioFifoRead(uint8_t **data, int nbSamples) {
