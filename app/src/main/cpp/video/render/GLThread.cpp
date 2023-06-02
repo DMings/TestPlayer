@@ -52,7 +52,7 @@ void *GLThread::glProcess(void *arg) {
     return NULL;
 }
 
-GLThread::GLThread() {
+GLThread::GLThread() : gl_mutex(), gl_cond(), surface(nullptr) {
     pthread_mutex_init(&gl_mutex, NULL);
     pthread_cond_init(&gl_cond, NULL);
 }

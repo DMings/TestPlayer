@@ -5,7 +5,7 @@
 #ifndef TESTPLAYER_EGLENGINE_H
 #define TESTPLAYER_EGLENGINE_H
 
-#include "log.h"
+#include "../../utils/log.h"
 #include <android/native_window_jni.h>
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>

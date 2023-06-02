@@ -5,19 +5,26 @@ set(CMAKE_CXX_STANDARD 17)
 add_library(
         fplayer
         SHARED
-        OpenSL.cpp
-        OpenGL.cpp
-        GLRender.cpp
-        GLUtils.cpp
-        FPacket.c
-        AVClock.cpp
-        BaseAV.cpp
-        Audio.cpp
-        Video.cpp
+        audio/render/OpenSL.cpp
+        video/render/OpenGL.cpp
+        video/render/GLRender.cpp
+        video/render/GLUtils.cpp
+        av/FPacket.c
+        av/AVClock.cpp
+        av/BaseAV.cpp
+        audio/Audio.cpp
+        video/Video.cpp
         FPlayer.cpp
-        PthreadSleep.cpp
-        GLThread.cpp
-        AudioSpeed.cpp
+        utils/PthreadSleep.cpp
+        video/render/GLThread.cpp
+        audio/render/AudioSpeed.cpp
+        audio/render/record_audio.cpp
+
+        utils/time_utils.cpp
+
+        ntp/ntp_client.c
+        ntp/xtime.c
+
         FPlayerJni.cpp
         )
 find_library(log-lib log)
@@ -41,6 +48,10 @@ set_target_properties(soundtouch PROPERTIES IMPORTED_LOCATION ${ffmepgSrc}/libso
 
 include_directories(${CMAKE_SOURCE_DIR}/libs/include/)
 
+set (OBOE_DIR ./oboe)
+add_subdirectory (${OBOE_DIR} ./oboe)
+include_directories (${OBOE_DIR}/include)
+
 #如果当前系统版本过低设置拒绝编译
 #if (${ANDROID_PLATFORM_LEVEL} LESS 11)
 #    message(FATAL_ERROR "OpenGL 2 is not supported before API level 11 (currently using ${ANDROID_PLATFORM_LEVEL}).")
@@ -54,6 +65,7 @@ include_directories(${CMAKE_SOURCE_DIR}/libs/include/)
 
 target_link_libraries(
         fplayer
+        oboe
         avformat
         avcodec
         avutil

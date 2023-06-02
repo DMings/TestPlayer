@@ -6,9 +6,9 @@
 #ifndef TESTPLAYER_AUDIO_H
 #define TESTPLAYER_AUDIO_H
 
-#include "OpenSL.h"
-#include "BaseAV.h"
-#include "PthreadSleep.h"
+#include "render/OpenSL.h"
+#include "../av/BaseAV.h"
+#include "../utils/PthreadSleep.h"
 
 class Audio : BaseAV {
 public:

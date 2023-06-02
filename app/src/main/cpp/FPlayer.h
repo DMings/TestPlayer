@@ -5,8 +5,8 @@
 #ifndef TESTPLAYER_FFUTILS_H
 #define TESTPLAYER_FFUTILS_H
 
-#include "Audio.h"
-#include "Video.h"
+#include "audio/Audio.h"
+#include "video/Video.h"
 
 enum PlayStatus {
     IDLE, PREPARE, PLAYING, STOPPING,
@@ -14,12 +14,13 @@ enum PlayStatus {
 
 class FPlayer {
 private:
-    AVFormatContext *fmt_ctx = NULL;
+    AVFormatContext *fmt_ctx = nullptr;
     Video *video = nullptr;
     Audio *audio = nullptr;
     GLThread *glThread;
     AVClock *avClock;
     AVPacket *pkt;
+    std::atomic_bool running = false;
 
 public:
 

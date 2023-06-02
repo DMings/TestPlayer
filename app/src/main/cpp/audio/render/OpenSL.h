@@ -6,7 +6,7 @@
 #define TESTPLAYER_OPENSL_H
 
 #include <SLES/OpenSLES_Android.h>
-#include "log.h"
+#include "../../utils/log.h"
 
 typedef void (*signSlBufferCallback)();
 //typedef void (*SlBufferCallback)(uint8_t **buffer, uint32_t *bufferSize);

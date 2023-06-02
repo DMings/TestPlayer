@@ -5,10 +5,10 @@
 #ifndef TESTPLAYER_VIDEO_H
 #define TESTPLAYER_VIDEO_H
 
-#include "GLThread.h"
-#include "Audio.h"
-#include "BaseAV.h"
-#include "PthreadSleep.h"
+#include "./render/GLThread.h"
+#include "../audio/Audio.h"
+#include "../av/BaseAV.h"
+#include "../utils/PthreadSleep.h"
 
 class Video : BaseAV {
 public:

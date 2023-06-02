@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
-#include "log.h"
+#include "utils/log.h"
 #include "FPlayer.h"
 
 extern "C" {
@@ -90,10 +90,10 @@ JNINativeMethod method[] = {
         {"pause",             "(J)V",                         (void *) Pause},
         {"resume",            "(J)V",                         (void *) Resume},
         {"stop",              "(J)V",                         (void *) Stop},
-        {"surface_created",   "(JLandroid/view/Surface;)V",   (void *) SurfaceCreated},
-        {"surface_changed",   "(JLandroid/view/Surface;II)V", (void *) SurfaceChanged},
-        {"surface_destroyed", "(J)V",                         (void *) SurfaceDestroyed},
-        {"get_current_time",  "(J)J",                         (void *) GetCurrentTime},
+        {"surfaceCreated",   "(JLandroid/view/Surface;)V",   (void *) SurfaceCreated},
+        {"surfaceChanged",   "(JLandroid/view/Surface;II)V", (void *) SurfaceChanged},
+        {"surfaceDestroyed", "(J)V",                         (void *) SurfaceDestroyed},
+        {"getCurrentTime",  "(J)J",                         (void *) GetCurrentTime},
         {"deleteInstance",    "(J)V",                         (void *) DeleteInstance},
 };
 

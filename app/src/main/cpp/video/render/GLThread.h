@@ -41,10 +41,10 @@ private:
     pthread_cond_t gl_cond;
 
     ANativeWindow *surface;
-    int view_width;
-    int view_height;
-    int tex_width;
-    int tex_height;
+    int view_width = 1;
+    int view_height= 1;
+    int tex_width= 1;
+    int tex_height= 1;
 };
 
 

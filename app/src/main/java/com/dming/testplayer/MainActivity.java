@@ -23,13 +23,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView mTvSrc;
     private ImageView mPlayBtn;
     private TextView mCurTimeTv;
-    private long mTotalTime;
     private long mCurTime;
     private LinearLayout mControlLL;
     private FrameLayout mTitleLayout;
     private Handler mHandler;
     private String mUrlPath;
-    private long mSystemTime;
     private FPlayer mFPlayer;
     private boolean mIsPlaying = false;
     private boolean mIsShowPlayUI = true;
@@ -58,31 +56,28 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         mFPlayer = new FPlayer(mPlaySv);
-        mFPlayer.setOnProgressListener(new OnProgressListener() {
+        mFPlayer.setOnPlayListener(new FPlayer.OnPlayListener() {
             @Override
-            public void onProgress(int curTime, final int totalTime) { // curTime == -1 视频结束
-                if (curTime == -1) {
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            mIsPlaying = false;
-                            mCurTimeTv.setText("00:00");
-                            mPlayBtn.setImageResource(R.drawable.ic_button_play);
-                            mPlayBtn.setVisibility(View.GONE);
-                            mControlLL.setVisibility(View.VISIBLE);
-                            mTvSrc.setVisibility(View.VISIBLE);
-                            mTitleLayout.setVisibility(View.VISIBLE);
-                        }
-                    });
-                } else {
-                    mCurTime = curTime;
-                    mTotalTime = totalTime;
-                    mHandler.removeCallbacks(textRunnable);
-                    mHandler.post(textRunnable);
-                }
+            public void onStart() {
+                mHandler.post(() -> {
+                    mIsPlaying = true;
+                    mIsShowPlayUI = false;
+                    mTvSrc.setText(mUrlPath);
+                    mCurTimeTv.setText(DUtils.secToTime(mCurTime));
+                    mPlayBtn.setImageResource(R.drawable.ic_button_pause);
+                });
+            }
+
+            @Override
+            public void onEnd(boolean success) {
+                mHandler.post(() -> {
+                    mIsPlaying = false;
+                    mCurTimeTv.setText("--:--");
+                    mTvSrc.setText("无播放");
+                    mPlayBtn.setImageResource(R.drawable.ic_button_play);
+                });
             }
         });
-//        mCurTimeTv.setText(DUtils.secToTime((long) (1.0f * seekBar.getProgress() / seekBar.getMax() * mFPlayer.getDurationTime())));
         final ImageView fullBtn = findViewById(R.id.iv_full);
         fullBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -103,27 +98,26 @@ public class MainActivity extends AppCompatActivity {
                 setVisible();
             }
         });
-
+        if (mUrlPath == null) {
+            Toast.makeText(MainActivity.this, "当前无视频可播放", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        playOrPause();
     }
 
     private void setVisible() {
-        if (!false) {
-            if (mIsShowPlayUI) {
-                mIsShowPlayUI = false;
-                mPlayBtn.setVisibility(View.GONE);
-                mControlLL.setVisibility(View.GONE);
-                mTvSrc.setVisibility(View.GONE);
-                mTitleLayout.setVisibility(View.GONE);
-            } else {
-                mIsShowPlayUI = true;
-                mPlayBtn.setVisibility(View.VISIBLE);
-                mControlLL.setVisibility(View.VISIBLE);
-                mTvSrc.setVisibility(View.VISIBLE);
-                mTitleLayout.setVisibility(View.VISIBLE);
-            }
+        if (mIsShowPlayUI) {
+            mIsShowPlayUI = false;
+            mPlayBtn.setVisibility(View.GONE);
+            mControlLL.setVisibility(View.GONE);
+            mTvSrc.setVisibility(View.GONE);
+            mTitleLayout.setVisibility(View.GONE);
         } else {
+            mIsShowPlayUI = true;
             mPlayBtn.setVisibility(View.VISIBLE);
-//                    removeAndPost();
+            mControlLL.setVisibility(View.VISIBLE);
+            mTvSrc.setVisibility(View.VISIBLE);
+            mTitleLayout.setVisibility(View.VISIBLE);
         }
     }
 
@@ -131,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
         PermissionFragment.checkPermission(this, new Runnable() {
             @Override
             public void run() {
-                if (mFPlayer.getPlayState() == FPlayer.PlayStatus.PLAYING) {
+                if (mFPlayer.getPlayState() == FPlayer.PlayStatus.PLAY) {
                     if (!mIsPlaying) {
                         mIsPlaying = true;
                         mFPlayer.onResume();
@@ -141,46 +135,18 @@ public class MainActivity extends AppCompatActivity {
                         mFPlayer.onPause();
                         mPlayBtn.setImageResource(R.drawable.ic_button_play);
                     }
-                } else {
-                    mPlaySv.setVisibility(View.VISIBLE);
-                    int ret = mFPlayer.play(mUrlPath, new Runnable() {
-                        @Override
-                        public void run() {
-                            mIsShowPlayUI = false;
-                            mTvSrc.setText(mUrlPath);
-                            setVisible();
-                        }
-                    }, new Runnable() {
-                        @Override
-                        public void run() {
-                            mIsPlaying = true;
-                            mPlayBtn.setImageResource(R.drawable.ic_button_pause);
-                        }
-                    }, new Runnable() {
-                        @Override
-                        public void run() {
-                            Toast.makeText(MainActivity.this, "视频播放失败", Toast.LENGTH_SHORT).show();
-                        }
-                    });
-                    FLog.i("ret=" + ret);
+                } else if (mFPlayer.getPlayState() == FPlayer.PlayStatus.IDLE) {
+                    mFPlayer.start(mUrlPath);
                 }
             }
         });
     }
 
-    private Runnable textRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (mTotalTime > 0 && mCurTime == mTotalTime) {
-                mPlayBtn.setImageResource(R.drawable.ic_button_play);
-            }
-            mCurTimeTv.setText(DUtils.secToTime(mCurTime));
-        }
-    };
-
     @Override
     protected void onPause() {
-        mFPlayer.onPause();
+        if (mIsPlaying) {
+            mFPlayer.onPause();
+        }
         super.onPause();
     }
 
@@ -192,7 +158,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onDestroy() {
         mFPlayer.onDestroy();
@@ -201,12 +166,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (System.currentTimeMillis() - mSystemTime > 2000) {
-            Toast.makeText(this, "再按一次退出", Toast.LENGTH_SHORT).show();
-            mSystemTime = System.currentTimeMillis();
-        } else {
-            finish();
-        }
+        finish();
     }
 
 }

@@ -4,8 +4,10 @@
 
 #include "OpenGL.h"
 
-OpenGL::OpenGL() {
-
+OpenGL::OpenGL() : glRender(), mEglDisplay(), mEglSurface() {
+    mTexWidth = 1;
+    mTexHeight = 1;
+    mWindow = nullptr;
 }
 
 OpenGL::~OpenGL() {

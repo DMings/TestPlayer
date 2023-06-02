@@ -153,7 +153,7 @@ void *Video::videoProcess(void *arg) {
         }
     }
     end:
-    video->glThread->setParams(nullptr, 0, 0);
+    video->glThread->setParams(nullptr, 1, 1);
     video->glThread->drawBackground();
     av_frame_free(&frame);
     LOGI("videoProcess end video->pkt_list size: %ld", video->pkt_list.size());
