@@ -143,8 +143,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     LOGI("JNI_OnLoad");
     JNIEnv *env;
     av_jni_set_java_vm(vm, nullptr);
-    av_log_set_level(AV_LOG_INFO);
-    av_log_set_callback(syslog_print);
+//    av_log_set_level(AV_LOG_INFO);
+//    av_log_set_callback(syslog_print);
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         registerNativeMethod(env);
         return JNI_VERSION_1_6;

@@ -12,8 +12,8 @@ DataCallbackResult AudioPlay::MyDataCallback::onAudioReady(
         AudioStream *audioStream,
         void *audioData,
         int32_t numFrames) {
-    LOGI("numFrames: %d cost time: %lld", numFrames,
-         (GetCurrentTimeMs() - mParent->mTestTime));
+//    LOGI("numFrames: %d cost time: %lld", numFrames,
+//         (GetCurrentTimeMs() - mParent->mTestTime));
     mParent->mTestTime = GetCurrentTimeMs();
     auto *data = static_cast<uint8_t *>(audioData);
     int dataSize = mParent->playAudioBuffer_.GetData(&data, numFrames);

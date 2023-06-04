@@ -21,6 +21,8 @@ public:
 
     void putAvPacket(FPacket* pkt);
 
+    uint64_t getAvPacketSize();
+
     void pause();
 
     void resume();

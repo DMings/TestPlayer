@@ -16,6 +16,8 @@ public:
 
     void putAvPacket(FPacket* pkt);
 
+    uint64_t getAvPacketSize();
+
     int synchronize_audio(int nb_samples);
 
     int open_stream(AVFormatContext *fmt_ctx);

@@ -60,6 +60,14 @@ void Video::putAvPacket(FPacket *pkt) {
     }
 }
 
+uint64_t Video::getAvPacketSize() {
+    uint64_t size;
+    pthread_mutex_lock(&c_mutex);
+    size = pkt_list.size();
+    pthread_mutex_unlock(&c_mutex);
+    return size;
+}
+
 void *Video::videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;

@@ -56,6 +56,14 @@ void Audio::putAvPacket(FPacket *pkt) {
     }
 }
 
+uint64_t Audio::getAvPacketSize() {
+    uint64_t size;
+    pthread_mutex_lock(&c_mutex);
+    size = pkt_list.size();
+    pthread_mutex_unlock(&c_mutex);
+    return size;
+}
+
 void *Audio::audioProcess(void *arg) {
     int ret = 0;
     int wanted_nb_samples = 0;
