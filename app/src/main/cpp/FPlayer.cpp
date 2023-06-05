@@ -70,7 +70,7 @@ int FPlayer::Loop() {
     int ret = 0;
     bool findKeyFrame = false;
     std::list<AVPacket *> pktList;
-    int64_t cacheTime = 200 * 1000;
+    int64_t cacheTime = 150 * 1000;
     bool reachCacheTime = false;
     int64_t vPts = -1;
     int64_t aPts = -1;

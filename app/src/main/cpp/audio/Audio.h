@@ -20,6 +20,10 @@ public:
 
     int synchronize_audio(int nb_samples);
 
+    float getPktListTime();
+
+    float getSpeed(float listTime);
+
     int open_stream(AVFormatContext *fmt_ctx);
 
     void pause();
@@ -44,6 +48,8 @@ private:
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
     std::atomic_bool is_pause = false;
+
+    float pktDuration = 48000.0f;
 };
 
 
