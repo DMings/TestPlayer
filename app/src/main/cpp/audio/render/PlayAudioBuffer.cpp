@@ -19,7 +19,7 @@ PlayAudioBuffer::PlayAudioBuffer(int sampleRate, int channels) {
     LOGI("PlayAudioBuffer nb_buffers: %d", nb_buffers);
 }
 
-void PlayAudioBuffer::PutData(uint8_t *data, int nbSamples) {
+void PlayAudioBuffer::PutSamples(uint8_t *data, int nbSamples) {
     std::unique_lock<std::mutex> lock(mtx_);
     int ret = AvAudioFifoWrite(reinterpret_cast<void **>(&data), nbSamples);
     if (ret < 0) {
@@ -29,7 +29,7 @@ void PlayAudioBuffer::PutData(uint8_t *data, int nbSamples) {
 }
 
 
-int PlayAudioBuffer::GetData(uint8_t **data, int nbSamples) {
+int PlayAudioBuffer::GetSamples(uint8_t **data, int nbSamples) {
     if (nbSamples == 0) {
         return 0;
     }
@@ -56,6 +56,10 @@ int PlayAudioBuffer::GetData(uint8_t **data, int nbSamples) {
         }
     }
     return -1;
+}
+
+int PlayAudioBuffer::DataSize() {
+    return AvAudioFifoNbSamples();
 }
 
 int PlayAudioBuffer::AvAudioFifoWrite(void **inputData, int nbSamples) {

@@ -61,7 +61,6 @@ public class FPlayer implements SurfaceHolder.Callback {
     }
 
     public void onDestroy() {
-        resume(mPtr);
         stop(mPtr);
         mPlayHandler.post(() -> {
             FLog.e("deleteInstance success");

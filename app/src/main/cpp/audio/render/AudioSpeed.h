@@ -14,23 +14,14 @@ using namespace soundtouch;
 class AudioSpeed {
 private:
     SoundTouch soundTouch;
-    FIFOSampleBuffer outputBuffer;
-    std::function<uint32_t(SAMPLETYPE * sampleBuffer)> requestData;
-    uint32_t numSamples;
-    SAMPLETYPE *tempBuffer;
-    bool isReceive;
     bool isFlush;
 public:
-    AudioSpeed(uint32_t sampleRate, uint32_t nChannels, uint32_t nSamples);
+    AudioSpeed(uint32_t sampleRate, int nChannels);
 
-    void setDataSource(std::function<uint32_t(SAMPLETYPE * sampleBuffer)> request);
-
-    // n = -95.0 .. +5000.0 %
     void setSpeed(float rate);
 
-    uint32_t getSamples(SAMPLETYPE *output);
-
-    uint32_t getWantSamples(SAMPLETYPE *output);
+    uint32_t getSamples(SAMPLETYPE *inputBuffer, uint32_t inputSamples,
+                        SAMPLETYPE *outputBuffer, uint32_t maxOutputSamples);
 
     void flush();
 

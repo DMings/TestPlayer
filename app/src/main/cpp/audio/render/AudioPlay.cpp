@@ -16,11 +16,11 @@ DataCallbackResult AudioPlay::MyDataCallback::onAudioReady(
 //         (GetCurrentTimeMs() - mParent->mTestTime));
     mParent->mTestTime = GetCurrentTimeMs();
     auto *data = static_cast<uint8_t *>(audioData);
-    int dataSize = mParent->playAudioBuffer_.GetData(&data, numFrames);
+    int dataSize = mParent->playAudioBuffer_.GetSamples(&data, numFrames);
     if (dataSize > 0) {
         return DataCallbackResult::Continue;
     } else {
-        LOGE("playAudioBuffer_.GetData: %d", dataSize);
+        LOGE("playAudioBuffer_.GetSamples: %d", dataSize);
         return DataCallbackResult::Stop;
     }
 }
@@ -59,12 +59,17 @@ AudioPlay::AudioPlay(int sampleRate, int channels) : playAudioBuffer_(sampleRate
     mTestTime = 0;
 }
 
-void AudioPlay::PutData(uint8_t *data, int nbSamples) {
+void AudioPlay::PutSamples(uint8_t *data, int nbSamples) {
     if (nbSamples == 0) {
         return;
     }
-    playAudioBuffer_.PutData(data, nbSamples);
+    playAudioBuffer_.PutSamples(data, nbSamples);
 }
+
+int AudioPlay::SampleCount() {
+    return playAudioBuffer_.DataSize();
+}
+
 
 void AudioPlay::Start() {
     mStream->requestStart();

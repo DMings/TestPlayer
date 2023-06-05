@@ -13,7 +13,9 @@ class AudioPlay {
 public:
     AudioPlay(int sampleRate, int channels);
 
-    void PutData(uint8_t *data, int dataSize);
+    void PutSamples(uint8_t *data, int dataSize);
+
+    int SampleCount();
 
     void Start();
 

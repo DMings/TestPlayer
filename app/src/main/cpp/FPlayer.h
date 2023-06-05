@@ -21,6 +21,13 @@ private:
     AVClock *avClock;
     AVPacket *pkt;
     std::atomic_bool running = false;
+    AVIOInterruptCB avIOInterruptCB_;
+    std::atomic_int64_t timeoutMS_;
+public:
+    static constexpr int SEND_TIMEOUT_MS = 3000;
+    static constexpr int SEND_BUFFER_TIME_MS = 3000;
+
+    static int TimeoutInterruptCb(void *ctx);
 
 public:
 

@@ -19,9 +19,11 @@ class PlayAudioBuffer {
 public:
     PlayAudioBuffer(int sampleRate, int channels);
 
-    void PutData(uint8_t *data, int nbSamples);
+    void PutSamples(uint8_t *data, int nbSamples);
 
-    int GetData(uint8_t **data, int nbSamples);
+    int GetSamples(uint8_t **data, int nbSamples);
+
+    int DataSize();
 
     void NotifyFinish();
 

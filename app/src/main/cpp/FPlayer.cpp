@@ -10,6 +10,7 @@ FPlayer::FPlayer() {
     avClock = new AVClock();
     pkt = nullptr;
     fmt_ctx = nullptr;
+    avIOInterruptCB_ = {.callback = &FPlayer::TimeoutInterruptCb, .opaque = this};
 }
 
 GLThread *FPlayer::GetGLThread() {
@@ -33,6 +34,9 @@ int FPlayer::Start(const char *url) {
     av_dict_set_int(&dic, "analyzeduration", 1 * AV_TIME_BASE, 0);
     av_dict_set_int(&dic, "fpsprobesize", 0, 0);
 
+    fmt_ctx = avformat_alloc_context();
+    timeoutMS_ = GetCurrentTimeMs();
+    fmt_ctx->interrupt_callback = avIOInterruptCB_;
     if (avformat_open_input(&fmt_ctx, url, fmt, &dic) < 0) {
         LOGE("Could not open source file %s", url);
         return -1;
@@ -40,6 +44,7 @@ int FPlayer::Start(const char *url) {
     LOGE("avformat_open_input... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
     timeMs = av_gettime_relative() / 1000;
 
+    timeoutMS_ = GetCurrentTimeMs();
     AVDictionary *find_dic = nullptr;
     if (avformat_find_stream_info(fmt_ctx, &find_dic) < 0) {
         LOGE("Could not find stream information");
@@ -52,6 +57,15 @@ int FPlayer::Start(const char *url) {
     return 0;
 }
 
+int FPlayer::TimeoutInterruptCb(void *ctx) {
+//    auto streamsPush = static_cast<FPlayer *>(ctx);
+//    if ((GetCurrentTimeMs() - streamsPush->timeoutMS_) > FPlayer::SEND_TIMEOUT_MS) {
+//        LOGE("TimeoutInterruptCb.... timeout: %ld", (GetCurrentTimeMs() - streamsPush->timeoutMS_));
+//        return AVERROR_EXIT;
+//    }
+    return 0;
+}
+
 int FPlayer::Loop() {
     int ret = 0;
     bool findKeyFrame = false;
@@ -61,6 +75,7 @@ int FPlayer::Loop() {
     int64_t vPts = -1;
     int64_t aPts = -1;
     do {
+        timeoutMS_ = GetCurrentTimeMs();
         ret = av_read_frame(fmt_ctx, pkt);
         if (ret == 0) {
             if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
@@ -131,8 +146,6 @@ int FPlayer::Loop() {
                                                                      AV_TIME_BASE_Q));
                             }
                         }
-                        LOGE("videoTime: %ld", videoMaxTime - videoMinTime);
-                        LOGE("audioTime: %ld", audioMaxTime - audioMinTime);
 
                         if (cacheTime == 0 ||
                             (videoMaxTime != INT64_MIN && videoMinTime != INT64_MAX &&
@@ -140,7 +153,6 @@ int FPlayer::Loop() {
                             (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
                              audioMaxTime - audioMinTime > cacheTime)) {
                             reachCacheTime = false;
-                            LOGE("pktList send: %ld", pktList.size());
                             for (auto itr = pktList.begin(); itr != pktList.end();) {
                                 auto *cPkt = (*itr);
                                 FPacket *f_pkt = alloc_packet();
@@ -152,6 +164,8 @@ int FPlayer::Loop() {
                                 }
                                 itr = pktList.erase(itr);
                             }
+                            LOGE("videoTime: %ld", videoMaxTime - videoMinTime);
+                            LOGE("audioTime: %ld", audioMaxTime - audioMinTime);
                             LOGE("video getAvPacketSize send: %ld", video->getAvPacketSize());
                             LOGE("audio getAvPacketSize send: %ld", audio->getAvPacketSize());
                         } else {
@@ -241,6 +255,7 @@ int64_t FPlayer::GetCurTimeMs() {
 }
 
 void FPlayer::Stop() {
+    av_read_play(fmt_ctx);
     running = false;
 }
 
