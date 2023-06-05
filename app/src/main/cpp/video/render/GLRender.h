@@ -7,7 +7,7 @@
 
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
-#include "../../utils/log.h"
+#include "../../utils/FLog.h"
 #include <jni.h>
 #include "GLUtils.h"
 

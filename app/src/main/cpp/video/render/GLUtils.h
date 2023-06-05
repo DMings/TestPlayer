@@ -6,7 +6,7 @@
 #define TESTPLAYER_GLUTILS_H
 
 #include <GLES2/gl2.h>
-#include "../../utils/log.h"
+#include "../../utils/FLog.h"
 #include <malloc.h>
 
 class GLUtils {

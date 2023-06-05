@@ -56,7 +56,7 @@ int FPlayer::Loop() {
     int ret = 0;
     bool findKeyFrame = false;
     std::list<AVPacket *> pktList;
-    int64_t cacheTime = 200;
+    int64_t cacheTime = 200 * 1000;
     bool reachCacheTime = false;
     int64_t vPts = -1;
     int64_t aPts = -1;
@@ -81,7 +81,7 @@ int FPlayer::Loop() {
 
                 if (pkt->stream_index == video->stream_id) {
                     pkt->time_base = video->av_stream->time_base;
-                    if (pkt->flags == AV_PKT_FLAG_KEY) {
+                    if (pkt->flags == AV_PKT_FLAG_KEY && !findKeyFrame) {
                         findKeyFrame = true;
                         int64_t videoKeyPts = av_rescale_q(pkt->pts, pkt->time_base,
                                                            AV_TIME_BASE_Q);
@@ -105,24 +105,16 @@ int FPlayer::Loop() {
                 }
                 if (!findKeyFrame || reachCacheTime) {
 
-                    LOGE("findKeyFrame: %d reachCacheTime: %d", findKeyFrame,reachCacheTime);
-
                     auto clonePkt = av_packet_alloc();
                     av_packet_move_ref(clonePkt, pkt);
                     pktList.push_back(clonePkt);
 
                     if (reachCacheTime) {
-
-                        LOGE("pktList.size: %ld", pktList.size());
-
                         int64_t videoMaxTime = INT64_MIN;
                         int64_t videoMinTime = INT64_MAX;
                         int64_t audioMaxTime = INT64_MIN;
                         int64_t audioMinTime = INT64_MAX;
                         for (auto cPkt: pktList) {
-
-                            LOGE("cPkt->stream_index: %d", cPkt->stream_index);
-
                             if (cPkt->stream_index == video->stream_id) {
                                 videoMaxTime = std::max(videoMaxTime,
                                                         av_rescale_q(cPkt->pts, cPkt->time_base,
@@ -139,17 +131,16 @@ int FPlayer::Loop() {
                                                                      AV_TIME_BASE_Q));
                             }
                         }
-                        LOGE("videoMaxTime: %ld videoMinTime: %ld", videoMaxTime, videoMinTime);
-                        LOGE("audioMaxTime: %ld audioMinTime: %ld", audioMaxTime, audioMinTime);
+                        LOGE("videoTime: %ld", videoMaxTime - videoMinTime);
+                        LOGE("audioTime: %ld", audioMaxTime - audioMinTime);
 
-                        if ((videoMaxTime != INT64_MIN && videoMinTime != INT64_MAX &&
+                        if (cacheTime == 0 ||
+                            (videoMaxTime != INT64_MIN && videoMinTime != INT64_MAX &&
                              videoMaxTime - videoMinTime > cacheTime) &&
                             (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
                              audioMaxTime - audioMinTime > cacheTime)) {
                             reachCacheTime = false;
                             LOGE("pktList send: %ld", pktList.size());
-                            LOGE("video getAvPacketSize send: %ld", video->getAvPacketSize());
-                            LOGE("audio getAvPacketSize send: %ld", audio->getAvPacketSize());
                             for (auto itr = pktList.begin(); itr != pktList.end();) {
                                 auto *cPkt = (*itr);
                                 FPacket *f_pkt = alloc_packet();
@@ -161,14 +152,12 @@ int FPlayer::Loop() {
                                 }
                                 itr = pktList.erase(itr);
                             }
+                            LOGE("video getAvPacketSize send: %ld", video->getAvPacketSize());
+                            LOGE("audio getAvPacketSize send: %ld", audio->getAvPacketSize());
                         } else {
-
-                            LOGE(">>>pktList send: %ld", pktList.size());
-
                             int videoCount = 0;
                             int audioCount = 0;
-                            for (auto itr = pktList.begin(); itr != pktList.end();) {
-                                auto *cPkt = (*itr);
+                            for (auto cPkt: pktList) {
                                 if (cPkt->stream_index == video->stream_id) {
                                     videoCount++;
                                 } else {
@@ -176,10 +165,7 @@ int FPlayer::Loop() {
                                 }
                             }
 
-                            LOGE("111>>>pktList send: %ld", pktList.size());
-
                             if (videoCount >= 60 || audioCount >= 200) {
-                                LOGE("222>>>pktList send: %ld", pktList.size());
                                 for (auto itr = pktList.begin(); itr != pktList.end();) {
                                     auto *cPkt = (*itr);
                                     av_packet_free(&cPkt);

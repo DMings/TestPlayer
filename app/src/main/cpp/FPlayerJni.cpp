@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
-#include "utils/log.h"
+#include "utils/FLog.h"
 #include "FPlayer.h"
 
 extern "C" {
