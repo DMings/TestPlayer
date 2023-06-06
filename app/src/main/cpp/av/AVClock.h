@@ -8,36 +8,30 @@
 #include <cstdint>
 
 struct Clock {
-    double pts;           /* clock base */
-    double last_updated;
+    int64_t pts;           /* clock base */
+    int64_t lastUpdated;
 };
 
 class AVClock {
 public:
-    Clock master_clk = {0};
-    Clock video_clk = {0};
-    Clock audio_clk = {0};
+    Clock videoClk = {0};
+    Clock audioClk = {0};
 
 public:
-    int32_t ff_sec_time = 0; // 当前时间
+    int64_t curTimeUs = 0; // 当前时间
 
     AVClock();
 
-    double get_master_clock();
+    int64_t GetVideoPtsClock();
 
-    double get_video_pts_clock();
+    void SetVideoClock(int64_t pts);
 
-    void set_video_clock(double pts);
+    int64_t GetAudioPtsClock();
 
-    double get_video_clock();
+    void SetAudioClock(int64_t pts);
 
-    double get_audio_clock();
+    void Reset();
 
-    double get_audio_pts_clock();
-
-    void set_audio_clock(double pts);
-
-    void set_master_clock(double time);
 };
 
 #endif //TESTPLAYER_AVCLOCK_H

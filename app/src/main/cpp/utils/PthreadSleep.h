@@ -13,7 +13,7 @@ public:
 
     ~PthreadSleep();
 
-    void msleep(unsigned int ms);
+    void sleep(unsigned int ms);
 
     void reset();
 

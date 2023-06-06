@@ -84,4 +84,19 @@
 
         </LinearLayout>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/iiv_msg"
+        android:layout_marginTop="60dp"
+        android:layout_marginLeft="20dp"
+        android:layout_marginRight="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:textSize="13sp"
+        android:textAllCaps="false"
+        android:maxLines="1"
+        android:textColor="#fff"
+        android:text=""
+        />
+
 </FrameLayout>

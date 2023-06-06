@@ -15,20 +15,24 @@ Video::Video(GLThread *glThread, AVClock *avClock) : avClock(avClock) {
 Video::~Video() {
 }
 
-uint Video::synchronize_video(double pkt_duration) { // us
+uint Video::synchronize_video(int64_t diffPts, int64_t pktDuration) { // ms
     uint wanted_delay = 0;
-    double diff_ms;
-    double duration;
+    int64_t diff_ms;
+    int64_t duration;
     AVRational rational = av_stream->r_frame_rate;
-    int video_base = (int) 1000.0 * rational.den / rational.num;
+    int video_base = (int) (1000.0 * rational.den / rational.num);
     if (video_base) {
         duration = video_base;
     } else {
-        duration = pkt_duration;
+        duration = pktDuration;
     }
     duration = duration < 200 ? duration : 200;
 
-    diff_ms = avClock->get_video_pts_clock() - avClock->get_audio_clock();
+    if (avClock->GetAudioPtsClock() == INT64_MIN) {
+        diff_ms = diffPts;
+    } else {
+        diff_ms = (avClock->GetVideoPtsClock() - avClock->GetAudioPtsClock()) / 1000;
+    }
 
     if (diff_ms < 0) { // 视频落后时间
         if (fabs(diff_ms) < duration * 0.1) { // 如果差距比较少就不管了
@@ -47,7 +51,6 @@ uint Video::synchronize_video(double pkt_duration) { // us
             }
         }
     }
-//    LOGI("video diff_ms: %f wanted_delay: %f pkt_duration: %f get_video_pts_clock: %f", diff_ms, wanted_delay,pkt_duration,get_video_pts_clock());
     return wanted_delay;
 }
 
@@ -71,7 +74,7 @@ uint64_t Video::getAvPacketSize() {
 void *Video::videoProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret = 0;
-    Video *video = (Video *) arg;
+    auto *video = (Video *) arg;
     FPacket *video_packet = nullptr;
     video->glThread->setParams(video->dst_data[0], video->av_dec_ctx->width,
                                video->av_dec_ctx->height);
@@ -121,12 +124,13 @@ void *Video::videoProcess(void *arg) {
                         break;
                     }
                     //  用 st 上的时基才对 av_stream
-                    double pts = (int64_t) (av_q2d(video->av_stream->time_base) * frame->pts *
-                                            1000.0); // ms
+                    int64_t pts = av_rescale_q(frame->pts,
+                                               video->av_stream->time_base,
+                                               AV_TIME_BASE_Q);// us
 
-//                LOGI("video pts: %f get_master_clock: %f", pts, video->avClock->get_master_clock());
-                    double pkt_duration = (int64_t) (av_q2d(video->av_stream->time_base) *
-                                                     frame->pkt_duration * 1000.0); // ms
+                    int64_t pkt_duration = av_rescale_q(frame->duration,
+                                                        video->av_stream->time_base,
+                                                        AV_TIME_BASE_Q);// us
                     video->glThread->lockDraw();
                     ret = sws_scale(video->sws_context,
                                     (const uint8_t *const *) frame->data, frame->linesize,
@@ -134,22 +138,17 @@ void *Video::videoProcess(void *arg) {
                                     video->dst_data, video->dst_line_size); // lock
                     video->glThread->unlockDraw();
 
-//            LOGI("video pts: %f get_audio_clock: %f get_master_clock: %f pkt_duration: %f", pts,
-//                 get_audio_clock(),
-//                 get_master_clock(),
-//                 pkt_duration);
-                    video->avClock->set_video_clock(pts);
-                    int delay = video->synchronize_video(pkt_duration); // ms
-//            LOGI("video delay->%d pts: %f get_master_clock: %f video_time: %f", delay, pts, get_master_clock(),
-//                 (get_master_clock() - video->test_video_time));
+                    video->avClock->SetVideoClock(pts);
+                    int64_t diffPts = pts - video->lastPts;
+                    int delay = video->synchronize_video(diffPts / 1000, pkt_duration / 1000); // ms
+//                    LOGI("audio GetAudioPtsClock: %ld GetVideoPtsClock: %ld delay: %d real diff: %ld",
+//                         video->avClock->GetAudioPtsClock(), video->avClock->GetVideoPtsClock(),
+//                         delay,
+//                         (video->avClock->GetAudioPtsClock(), video->avClock->GetVideoPtsClock()));
+                    video->lastPts = pts;
                     if (delay >= 0) {
-//                av_usleep((uint) delay * 1000); // us
-                        pthread_sleep.msleep((uint) delay);
-//                LOGI("video delay->%d get_master_clock: %f video_time: %f", delay, get_master_clock(),
-//                     (get_master_clock() - video->test_video_time));
+                        pthread_sleep.sleep((uint) delay);
                     }
-//            video->test_video_time = get_master_clock();
-
                     video->glThread->draw();
 
                     pthread_mutex_lock(&video->pause_mutex);

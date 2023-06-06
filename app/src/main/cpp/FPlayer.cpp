@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include "FPlayer.h"
 
-FPlayer::FPlayer() {
+FPlayer::FPlayer() : lock_mutex(), avIOInterruptCB_(), timeoutMS_() {
     glThread = new GLThread();
     avClock = new AVClock();
     pkt = nullptr;
@@ -17,10 +17,10 @@ GLThread *FPlayer::GetGLThread() {
     return glThread;
 }
 
-int FPlayer::Start(const char *url) {
+int FPlayer::Open(const char *url) {
     running = true;
     video = new Video(glThread, avClock);
-    audio = new Audio(avClock);
+    audio = new Audio(avClock, cacheTimeMs);
     //
     auto protocolName = avio_find_protocol_name(url);
     LOGI("protocolName: %s", protocolName);
@@ -54,29 +54,28 @@ int FPlayer::Start(const char *url) {
     audio->open_stream(fmt_ctx);
     video->open_stream(fmt_ctx);
     pkt = av_packet_alloc();
+
+    int ret = 0;
+
     return 0;
 }
 
 int FPlayer::TimeoutInterruptCb(void *ctx) {
-//    auto streamsPush = static_cast<FPlayer *>(ctx);
+    auto player = static_cast<FPlayer *>(ctx);
 //    if ((GetCurrentTimeMs() - streamsPush->timeoutMS_) > FPlayer::SEND_TIMEOUT_MS) {
 //        LOGE("TimeoutInterruptCb.... timeout: %ld", (GetCurrentTimeMs() - streamsPush->timeoutMS_));
 //        return AVERROR_EXIT;
 //    }
-    return 0;
+    return player->running ? 0 : AVERROR_EXIT;
 }
 
-int FPlayer::Loop() {
-    int ret = 0;
-    bool findKeyFrame = false;
-    std::list<AVPacket *> pktList;
-    int64_t cacheTime = 150 * 1000;
-    bool reachCacheTime = false;
-    int64_t vPts = -1;
-    int64_t aPts = -1;
-    do {
+int FPlayer::Handle() {
+    int ret = -1;
+    if (running) {
         timeoutMS_ = GetCurrentTimeMs();
+//        __TSC__(av_read_frame);
         ret = av_read_frame(fmt_ctx, pkt);
+//        __TEC_LIMIT__(av_read_frame, 10);
         if (ret == 0) {
             if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
 
@@ -147,11 +146,11 @@ int FPlayer::Loop() {
                             }
                         }
 
-                        if (cacheTime == 0 ||
+                        if (cacheTimeMs == 0 ||
                             (videoMaxTime != INT64_MIN && videoMinTime != INT64_MAX &&
-                             videoMaxTime - videoMinTime > cacheTime) &&
+                             videoMaxTime - videoMinTime > cacheTimeMs * 1000) &&
                             (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
-                             audioMaxTime - audioMinTime > cacheTime)) {
+                             audioMaxTime - audioMinTime > cacheTimeMs * 1000)) {
                             reachCacheTime = false;
                             for (auto itr = pktList.begin(); itr != pktList.end();) {
                                 auto *cPkt = (*itr);
@@ -202,9 +201,13 @@ int FPlayer::Loop() {
             }
             av_packet_unref(pkt);
         } else {
-            break;
+            ret = -1;
         }
-    } while (running);
+    }
+    return ret;
+}
+
+void FPlayer::Close() {
     LOGE("play Stop---------------------->");
     if (audio) {
         audio->release();
@@ -217,19 +220,22 @@ int FPlayer::Loop() {
     audio = nullptr;
     video = nullptr;
     LOGE("audio.Stop()  video.Release()");
+    pthread_mutex_lock(&lock_mutex);
     if (fmt_ctx) {
 //        avformat_flush(fmt_ctx); //ff_read_frame_flush
         av_packet_free(&pkt);
         avformat_close_input(&fmt_ctx);
     }
+    pthread_mutex_unlock(&lock_mutex);
     LOGI("avformat_close_input");
-    return 0;
 }
 
 void FPlayer::Pause() {
+    pthread_mutex_lock(&lock_mutex);
     if (fmt_ctx) {
         av_read_pause(fmt_ctx);
     }
+    pthread_mutex_unlock(&lock_mutex);
     if (video && video->stream_id != -1) {
         video->pause();
     }
@@ -239,9 +245,11 @@ void FPlayer::Pause() {
 }
 
 void FPlayer::Resume() {
+    pthread_mutex_lock(&lock_mutex);
     if (fmt_ctx) {
         av_read_play(fmt_ctx);
     }
+    pthread_mutex_unlock(&lock_mutex);
     if (video && video->stream_id != -1) {
         video->resume();
     }
@@ -250,12 +258,18 @@ void FPlayer::Resume() {
     }
 }
 
+int FPlayer::GetAudioCacheTimeMs() {
+    if (audio && audio->stream_id != -1) {
+        return (int) audio->getCacheTime();
+    }
+    return (int) cacheTimeMs;
+}
+
 int64_t FPlayer::GetCurTimeMs() {
-    return avClock->ff_sec_time;
+    return avClock->curTimeUs;
 }
 
 void FPlayer::Stop() {
-    av_read_play(fmt_ctx);
     running = false;
 }
 

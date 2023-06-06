@@ -24,6 +24,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     private final AtomicInteger mControlStatus = new AtomicInteger(PlayStatus.IDLE); // 0 idle 1 prepare 2 playing
     private long mPtr;
     private OnPlayListener mOnPlayListener;
+    private long mTime;
 
     public FPlayer(SurfaceView surfaceView) {
         mPtr = newInstance();
@@ -35,6 +36,8 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     public interface OnPlayListener {
         void onStart();
+
+        void onAudioCacheTime(long timeMs);
 
         void onEnd(boolean success);
 
@@ -76,6 +79,10 @@ public class FPlayer implements SurfaceHolder.Callback {
         return getCurrentTime(mPtr);
     }
 
+    public long getAudioCacheTime() {
+        return getAudioCacheTime(mPtr);
+    }
+
     public int getPlayState() {
         return mControlStatus.get();
     }
@@ -83,15 +90,23 @@ public class FPlayer implements SurfaceHolder.Callback {
     private final Runnable mStartRunnable = new Runnable() {
         @Override
         public void run() {
-            int ret = FPlayer.start(mPtr, mUrl);
+            int ret = FPlayer.open(mPtr, mUrl);
             if (mOnPlayListener != null) {
                 mOnPlayListener.onStart();
             }
             FLog.i("PlayStatus.PREPARE: " + ret);
             if (ret >= 0) {
                 mControlStatus.set(PlayStatus.PLAY);
-                ret = FPlayer.loop(mPtr);
-                FLog.i("PlayStatus.STOP: " + ret);
+                while (FPlayer.handle(mPtr) >= 0) {
+                    if (System.currentTimeMillis() - mTime > 200) {
+                        if (mOnPlayListener != null) {
+                            mOnPlayListener.onAudioCacheTime(getAudioCacheTime());
+                        }
+                        mTime = System.currentTimeMillis();
+                    }
+                }
+                FPlayer.close(mPtr);
+                FLog.i("PlayStatus.STOP");
             }
             mControlStatus.set(PlayStatus.STOPING);
             FPlayer.stop(mPtr);
@@ -138,9 +153,11 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     private static native long newInstance();
 
-    private static native int start(long ptr, String path);
+    private static native int open(long ptr, String path);
 
-    private static native int loop(long ptr);
+    private static native int handle(long ptr);
+
+    private static native void close(long ptr);
 
     private static native void pause(long ptr);
 
@@ -149,6 +166,8 @@ public class FPlayer implements SurfaceHolder.Callback {
     private static native void stop(long ptr);
 
     private static native long getCurrentTime(long ptr);
+
+    private static native long getAudioCacheTime(long ptr);
 
     private static native void surfaceCreated(long ptr, Surface surface);
 

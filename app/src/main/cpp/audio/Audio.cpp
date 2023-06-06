@@ -5,48 +5,17 @@
 #include "Audio.h"
 #include "./render/AudioSpeed.h"
 
-Audio::Audio(AVClock *avClock) : avClock(avClock), pause_cond(), pause_mutex() {
+Audio::Audio(AVClock *avClock, uint cacheTime) : cacheSetTime((float) cacheTime), avClock(avClock),
+                                                 pause_cond(), pause_mutex(),
+                                                 speedList() {
     thread_finish = false;
     playAudio = nullptr;
+    cacheCurTime = cacheSetTime;
 }
 
-int Audio::synchronize_audio(int nb_samples) {
-    int wanted_nb_samples;
-    double diff_ms;
-    double nb_time_ms;
-//    LOGI("get_audio_clock: %f get_master_clock: %f nb_samples: %d", get_audio_clock(), get_master_clock(), nb_samples);
-    diff_ms = avClock->get_audio_pts_clock() - avClock->get_master_clock();
-    nb_time_ms = 1.0 * nb_samples / av_dec_ctx->sample_rate * 1000; // ms
-//    LOGI("diff_ms: %f nb_time_ms: %f", diff_ms, nb_time_ms);
-    if (fabs(diff_ms) > nb_time_ms * 0.2) { // 超过阀值
-        if (diff_ms < 0) { // 音频落后时间
-            if (-diff_ms < nb_time_ms) { // 音频比较慢，要丢弃帧，加快下一次pts超过时基
-                wanted_nb_samples = (int) ((1 + diff_ms / nb_time_ms) * nb_samples);
-            } else {
-                wanted_nb_samples = 0;
-            }
-//            LOGI("wanted_nb_samples: %d diff_ms / nb_time_ms: %.6f,nb_samples: %d", wanted_nb_samples,(-diff_ms / nb_time_ms),nb_samples);
-        } else { // 音频超过时间
-            if (diff_ms < nb_time_ms) { // 音频比较快，要增加帧，减慢下一次的pts,让时基跟上
-                wanted_nb_samples = (int) (diff_ms / nb_time_ms * nb_samples + nb_samples);
-            } else {
-                wanted_nb_samples = nb_samples + nb_samples;
-            }
-        }
-        if (wanted_nb_samples < 0.2 * nb_samples) {  // 给上阀值，不能少于某一个采样率
-            wanted_nb_samples = (int) (0.2 * nb_samples);
-        }
-    } else {
-        wanted_nb_samples = nb_samples;
-    }
-//    wanted_nb_samples = ((wanted_nb_samples & 1) == 0) ? wanted_nb_samples : (wanted_nb_samples + 1);
-    LOGI("diff_ms: %f wanted_nb_samples: %d", diff_ms, wanted_nb_samples);
-    return wanted_nb_samples;
-//    min_nb_samples = ((nb_samples * (100 - SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-//    max_nb_samples = ((nb_samples * (100 + SAMPLE_CORRECTION_PERCENT_MAX) / 100));
-//    wanted_nb_samples = av_clip(wanted_nb_samples, min_nb_samples, max_nb_samples);
+uint Audio::getCacheTime() {
+    return (uint) cacheCurTime;
 }
-
 
 void Audio::putAvPacket(FPacket *pkt) {
     if (stream_id != -1) {
@@ -67,7 +36,6 @@ uint64_t Audio::getAvPacketSize() {
 
 void *Audio::audioProcess(void *arg) {
     int ret = 0;
-    int wanted_nb_samples = 0;
     FPacket *audio_packet = nullptr;
     auto *audio = (Audio *) arg;
     AVFrame *frame = av_frame_alloc();
@@ -77,8 +45,8 @@ void *Audio::audioProcess(void *arg) {
     auto *audioSpeed = new AudioSpeed(sampleRate, nbChannels);
     auto audioData = static_cast<uint8_t *>(memalign(64, sampleRate * nbChannels * bytes));
     LOGI("audioProcess: run!!!");
-    float testSpeed = 1.0f;
-    bool speedFlag = false;
+    float lastPlaySpeed = 1.0f;
+    float playSpeed = 1.0f;
     float pktListTime = 0.f;
     while (!audio->thread_finish) {
         do {
@@ -125,41 +93,47 @@ void *Audio::audioProcess(void *arg) {
                         LOGE("audio legitimate decoding errors");
                         break;
                     }
-                    double pts = av_q2d(audio->av_stream->time_base) * frame->pts * 1000.0;
 
-//                LOGI("audio pts: %f get_master_clock: %f", pts, audio->avClock->get_master_clock());
-
-                    audio->avClock->ff_sec_time = (int32_t) (pts / 1000);
-//            LOGI("updateTimeFun cast time: %f",  ((av_gettime_relative() / 1000.0) - audio->test_audio_time));
-//                wanted_nb_samples = audio->synchronize_audio(frame->nb_samples);
-
-                    wanted_nb_samples = frame->nb_samples;
-
-                    testSpeed = audio->getSpeed(pktListTime);
-                    audioSpeed->setSpeed(testSpeed);
+                    auto speedUnprocessedSampleTime = (float) (1000.0 * audioSpeed->NumUnprocessedSamples() /
+                                                     audio->av_dec_ctx->sample_rate);
+                    playSpeed = audio->getSpeed(pktListTime + speedUnprocessedSampleTime);
+                    if (lastPlaySpeed != playSpeed) {
+                        audioSpeed->SetSpeed(playSpeed);
+                        lastPlaySpeed = playSpeed;
+//                        LOGI("playSpeed: %f numSamples: %d pkt_list size: %ld pktListTime: %f speedSamplesTime: %f",
+//                             playSpeed,
+//                             frame->nb_samples,
+//                             audio->pkt_list.size(), pktListTime, speedUnprocessedSampleTime);
+                    }
 
                     int sendSamples = frame->nb_samples;
-                    LOGI("testSpeed: %f numSamples: %d pkt_list size: %ld pktListTime: %f",
-                         testSpeed,
-                         sendSamples,
-                         audio->pkt_list.size(), pktListTime);
                     do {
-                        uint32_t numSamples = audioSpeed->getSamples(
-                                reinterpret_cast<SAMPLETYPE *>(frame->data[0]), sendSamples,
-                                reinterpret_cast<SAMPLETYPE *>(audioData), 512);
+                        uint32_t numSamples = audioSpeed->GetSamples(
+                                reinterpret_cast<soundtouch::SAMPLETYPE *>(frame->data[0]),
+                                sendSamples,
+                                reinterpret_cast<soundtouch::SAMPLETYPE *>(audioData), 512);
                         sendSamples = 0;
                         if (numSamples <= 0) {
                             break;
                         }
                         if (numSamples > 0 && audio->playAudio) {
-                            while (audio->playAudio->SampleCount() > 1400) {
+                            while (audio->playAudio->SampleCount() > 512 * 4) {
                                 usleep(1000);
                             }
-                            audio->playAudio->PutSamples(audioData, numSamples);
+                            if (audio->playAudio->SampleCount() < 400) {
+                                LOGE("SampleCount: %d", audio->playAudio->SampleCount());
+                            }
+
+                            audio->playAudio->PutSamples(audioData, (int) numSamples);
                         }
                     } while (true);
 
-                    audio->avClock->set_audio_clock(pts);// ms
+                    int64_t pts = av_rescale_q(audio_packet->avPacket->pts,
+                                               audio_packet->avPacket->time_base,
+                                               AV_TIME_BASE_Q);
+                    pts -= (int64_t) speedUnprocessedSampleTime * 1000;
+                    audio->avClock->curTimeUs = pts;
+                    audio->avClock->SetAudioClock(pts);
 
                     pthread_mutex_lock(&audio->pause_mutex);
                     if (audio->is_pause) {
@@ -174,10 +148,10 @@ void *Audio::audioProcess(void *arg) {
     }
     end:
     av_frame_free(&frame);
-    audioSpeed->flush();
+    audioSpeed->Flush();
     free(audioData);
     LOGI("audioProcess end pkt_list size: %ld", audio->pkt_list.size());
-    return 0;
+    return nullptr;
 }
 
 float Audio::getPktListTime() {
@@ -191,33 +165,63 @@ float Audio::getPktListTime() {
                                 av_rescale_q(pkt->avPacket->pts, pkt->avPacket->time_base,
                                              AV_TIME_BASE_Q));
     }
-    if (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX) {
-        float t = (float) (audioMaxTime - audioMinTime) / 1000.f;
-        if (t == 0) {
-            LOGE("errrrr pkt_list.size: %ld", pkt_list.size());
-        }
-        return t;
+    if (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
+        audioMaxTime - audioMinTime != 0) {
+        return (float) (audioMaxTime - audioMinTime) / 1000.f;
     } else {
         return (float) pkt_list.size() * pktDuration;
     }
 }
 
 float Audio::getSpeed(float listTime) {
-    float maxTime = 180;
-    float minTime = 100;
+    float maxTime = (float) cacheCurTime + 30;
+    float minTime = std::max((float) cacheCurTime / 2.5f, 146.f);
+    minTime = std::min(minTime, 500.f);
     float speed = 1.0f;
     if (listTime > maxTime) {
         float t = listTime - maxTime;
         float v = t / maxTime;
         v = std::min(v, 3.f);
+        v *= 0.5f;
         speed *= (1.f + v);
     } else if (listTime < minTime) {
         float v = listTime / minTime;
-        v = 1.f - (1.f - v) * 0.5f;
+        v = 1.f - (1.f - v) * 0.6f;
         v = std::max(v, 0.3f);
         speed *= v;
     }
-    return speed;
+    speedList.push_back(speed);
+    for (;;) {
+        if (speedList.size() > 2) {
+            speedList.pop_front();
+        } else {
+            break;
+        }
+    }
+    float avgSpeed = 0.f;
+    for (auto s: speedList) {
+        avgSpeed += s;
+    }
+    avgSpeed = avgSpeed / (float) speedList.size();
+    if (avgSpeed < 0.9f) {
+        reachMinTimeCount++;
+    }
+    if (avgSpeed > 0.98f && avgSpeed < 1.02f) {
+        reachNormalTimeCount++;
+    }
+    if (reachMinTimeCount >= 3) {
+        reachMinTimeCount = 0;
+        cacheCurTime *= 1.3f;
+        cacheCurTime = std::min(cacheCurTime, 1500.f);
+    }
+    if (reachNormalTimeCount >= 20) {
+        reachNormalTimeCount = 0;
+        reachMinTimeCount = 0;
+        if (cacheCurTime + 20.f > cacheSetTime) {
+            cacheCurTime -= (cacheCurTime - cacheSetTime) * 0.2f;
+        }
+    }
+    return avgSpeed;
 }
 
 

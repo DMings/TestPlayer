@@ -9,21 +9,23 @@
 #include <libsoundtouch/FIFOSampleBuffer.h>
 #include <functional>
 
-using namespace soundtouch;
-
 class AudioSpeed {
 private:
-    SoundTouch soundTouch;
+    soundtouch::SoundTouch *soundTouch_;
     bool isFlush;
 public:
     AudioSpeed(uint32_t sampleRate, int nChannels);
 
-    void setSpeed(float rate);
+    void SetSpeed(float rate);
 
-    uint32_t getSamples(SAMPLETYPE *inputBuffer, uint32_t inputSamples,
-                        SAMPLETYPE *outputBuffer, uint32_t maxOutputSamples);
+    uint32_t GetSamples(soundtouch::SAMPLETYPE *inputBuffer, uint32_t inputSamples,
+                        soundtouch::SAMPLETYPE *outputBuffer, uint32_t maxOutputSamples);
 
-    void flush();
+    double GetInputOutputSampleRatio();
+
+    uint NumUnprocessedSamples() const;
+
+    void Flush();
 
     ~AudioSpeed();
 

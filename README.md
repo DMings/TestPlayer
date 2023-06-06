@@ -96,9 +96,9 @@ uint Video::synchronize_video(double pkt_duration) { // us
 
     if (!is_seeking) {
         if (has_audio) {
-            diff_ms = get_video_pts_clock() - get_audio_clock();
+            diff_ms = GetVideoPtsClock() - GetAudioClock();
         } else {
-            diff_ms = get_video_pts_clock() - get_master_clock();
+            diff_ms = GetVideoPtsClock() - get_master_clock();
         }
     } else { // 在seek的时候，音频是不可靠的，音频也在变，这时候尽量丢弃，反正都是没用的
         diff_ms = duration * 0.3;
@@ -106,7 +106,7 @@ uint Video::synchronize_video(double pkt_duration) { // us
 
     if (!has_audio && fabs(diff_ms) >= duration * 2) {  // 当只有视频的时候，已经明显失去了同步，校准一下
         double time = av_gettime_relative() / 1000.0;
-        set_master_clock(time - get_video_pts_clock());
+        set_master_clock(time - GetVideoPtsClock());
         return (uint) (duration * 0.7);
     }
 

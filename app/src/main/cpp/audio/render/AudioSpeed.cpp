@@ -3,33 +3,44 @@
 //
 
 #include "AudioSpeed.h"
+#include "../../utils/FLog.h"
 
 using namespace soundtouch;
 
 AudioSpeed::AudioSpeed(uint32_t sampleRate, int nChannels) {
     isFlush = false;
-    soundTouch.setSampleRate(sampleRate);
-    soundTouch.setChannels(nChannels);
+    soundTouch_ = new SoundTouch();
+    soundTouch_->setSampleRate(sampleRate);
+    soundTouch_->setChannels(nChannels);
 }
 
-void AudioSpeed::setSpeed(float rate) {
-    soundTouch.setTempo(rate);
+void AudioSpeed::SetSpeed(float rate) {
+    soundTouch_->setTempo(rate);
 }
 
 uint32_t
-AudioSpeed::getSamples(SAMPLETYPE *inputBuffer, uint32_t inputSamples, SAMPLETYPE *outputBuffer,
+AudioSpeed::GetSamples(SAMPLETYPE *inputBuffer, uint32_t inputSamples, SAMPLETYPE *outputBuffer,
                        uint32_t maxOutputSamples) {
     if (inputBuffer && inputSamples > 0) {
-        soundTouch.putSamples(inputBuffer, inputSamples);
+        soundTouch_->putSamples(inputBuffer, inputSamples);
     }
-    return soundTouch.receiveSamples(outputBuffer, maxOutputSamples);
+    return soundTouch_->receiveSamples(outputBuffer, maxOutputSamples);
 }
 
-void AudioSpeed::flush() {
+double AudioSpeed::GetInputOutputSampleRatio() {
+    return soundTouch_->getInputOutputSampleRatio();
+}
+
+uint AudioSpeed::NumUnprocessedSamples() const {
+    return soundTouch_->numUnprocessedSamples();
+}
+
+void AudioSpeed::Flush() {
     isFlush = false;
-    soundTouch.clear();
+    soundTouch_->clear();
 }
 
 AudioSpeed::~AudioSpeed() {
-    soundTouch.clear();
+    soundTouch_->clear();
+    delete soundTouch_;
 }

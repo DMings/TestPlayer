@@ -22,17 +22,22 @@ jlong NewInstance(JNIEnv *env, jclass type) {
     return reinterpret_cast<jlong>(ptr);
 }
 
-jint Start(JNIEnv *env, jclass type, jlong ptr, jstring path_) {
+jint Open(JNIEnv *env, jclass type, jlong ptr, jstring path_) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     const char *path = env->GetStringUTFChars(path_, nullptr);
-    int ret = player->Start(path);
+    int ret = player->Open(path);
     env->ReleaseStringUTFChars(path_, path);
     return ret;
 }
 
-int Loop(JNIEnv *env, jclass type, jlong ptr) {
+int Handle(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
-    return player->Loop();
+    return player->Handle();
+}
+
+void Close(JNIEnv *env, jclass type, jlong ptr) {
+    auto player = reinterpret_cast<FPlayer *>(ptr);
+    return player->Close();
 }
 
 void Pause(JNIEnv *env, jclass type, jlong ptr) {
@@ -73,6 +78,11 @@ jlong GetCurrentTime(JNIEnv *env, jclass type, jlong ptr) {
     return player->GetCurTimeMs();
 }
 
+jlong GetAudioCacheTime(JNIEnv *env, jclass type, jlong ptr) {
+    auto player = reinterpret_cast<FPlayer *>(ptr);
+    return player->GetAudioCacheTimeMs();
+}
+
 void DeleteInstance(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     delete player;
@@ -85,15 +95,17 @@ void DeleteInstance(JNIEnv *env, jclass type, jlong ptr) {
 
 JNINativeMethod method[] = {
         {"newInstance",       "()J",                          (void *) NewInstance},
-        {"start",             "(JLjava/lang/String;)I",       (void *) Start},
-        {"loop",              "(J)I",                         (void *) Loop},
+        {"open",              "(JLjava/lang/String;)I",       (void *) Open},
+        {"handle",            "(J)I",                         (void *) Handle},
+        {"close",             "(J)V",                         (void *) Close},
         {"pause",             "(J)V",                         (void *) Pause},
         {"resume",            "(J)V",                         (void *) Resume},
         {"stop",              "(J)V",                         (void *) Stop},
-        {"surfaceCreated",   "(JLandroid/view/Surface;)V",   (void *) SurfaceCreated},
-        {"surfaceChanged",   "(JLandroid/view/Surface;II)V", (void *) SurfaceChanged},
-        {"surfaceDestroyed", "(J)V",                         (void *) SurfaceDestroyed},
-        {"getCurrentTime",  "(J)J",                         (void *) GetCurrentTime},
+        {"surfaceCreated",    "(JLandroid/view/Surface;)V",   (void *) SurfaceCreated},
+        {"surfaceChanged",    "(JLandroid/view/Surface;II)V", (void *) SurfaceChanged},
+        {"surfaceDestroyed",  "(J)V",                         (void *) SurfaceDestroyed},
+        {"getAudioCacheTime", "(J)J",                         (void *) GetAudioCacheTime},
+        {"getCurrentTime",    "(J)J",                         (void *) GetCurrentTime},
         {"deleteInstance",    "(J)V",                         (void *) DeleteInstance},
 };
 

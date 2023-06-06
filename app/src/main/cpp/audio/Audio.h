@@ -1,7 +1,6 @@
 //
 // Created by Administrator on 2019/9/12.
 //
-//类的静态成员变量需要在类外分配内存空间
 
 #ifndef TESTPLAYER_AUDIO_H
 #define TESTPLAYER_AUDIO_H
@@ -12,13 +11,11 @@
 
 class Audio : BaseAV {
 public:
-    Audio(AVClock* avClock);
+    Audio(AVClock *avClock, uint cacheTime);
 
-    void putAvPacket(FPacket* pkt);
+    void putAvPacket(FPacket *pkt);
 
     uint64_t getAvPacketSize();
-
-    int synchronize_audio(int nb_samples);
 
     float getPktListTime();
 
@@ -32,24 +29,29 @@ public:
 
     void release();
 
-    AVClock* avClock;
+    uint getCacheTime();
 
+    AVStream *av_stream = nullptr;
+    AVCodecContext *av_dec_ctx = nullptr;
     int stream_id = -1;
-    AVStream *av_stream = NULL;
-    AVCodecContext *av_dec_ctx = NULL;
 private:
     bool isSampleRateValid(int sampleRate);
 
     static void *audioProcess(void *arg);
 
-    AudioPlay* playAudio;
+    AVClock *avClock = nullptr;
+    AudioPlay *playAudio;
     pthread_t p_audio_tid = 0;
     std::atomic_bool thread_finish = false;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
     std::atomic_bool is_pause = false;
-
-    float pktDuration = 48000.0f;
+    std::list<float> speedList;
+    float pktDuration = 1024000.f / 48000.0f;
+    float cacheSetTime = 200;
+    float cacheCurTime = 200;
+    uint reachMinTimeCount = 0;
+    uint reachNormalTimeCount = 0;
 };
 
 

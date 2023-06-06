@@ -46,10 +46,11 @@ private:
     std::atomic_bool is_pause = false;
     pthread_cond_t pause_cond;
     pthread_mutex_t pause_mutex;
+    int64_t lastPts = 0;
 
     static PthreadSleep pthread_sleep;
 
-    uint synchronize_video(double pkt_duration);
+    uint synchronize_video(int64_t diffPts, int64_t pktDuration);
 
     static void *videoProcess(void *arg);
 };

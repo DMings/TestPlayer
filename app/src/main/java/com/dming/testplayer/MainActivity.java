@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     private FPlayer mFPlayer;
     private boolean mIsPlaying = false;
     private boolean mIsShowPlayUI = true;
+    private TextView mAudioCacheTimeTv;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         mTvSrc = findViewById(R.id.iiv_src_name);
+        mAudioCacheTimeTv = findViewById(R.id.iiv_msg);
         mPlaySv = findViewById(R.id.sv_play);
         mTitleLayout = findViewById(R.id.fl_title);
         mPlayBtn = findViewById(R.id.iv_play);
@@ -65,6 +67,13 @@ public class MainActivity extends AppCompatActivity {
                     mTvSrc.setText(mUrlPath);
                     mCurTimeTv.setText(DUtils.secToTime(mCurTime));
                     mPlayBtn.setImageResource(R.drawable.ic_button_pause);
+                });
+            }
+
+            @Override
+            public void onAudioCacheTime(long timeMs) {
+                mHandler.post(() -> {
+                    mAudioCacheTimeTv.setText("AC: " + timeMs + "Ms");
                 });
             }
 

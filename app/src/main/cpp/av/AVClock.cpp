@@ -9,58 +9,38 @@ extern "C" {
 }
 
 AVClock::AVClock() {
-    master_clk = {0};
-    video_clk = {0};
-    audio_clk = {0};
-    set_master_clock(0);
+    videoClk = {0};
+    audioClk = {0};
 }
 
-double AVClock::get_master_clock() {
-    double time = av_gettime_relative() / 1000.0;
-    if (master_clk.last_updated == 0) {
-        master_clk.last_updated = time;
+int64_t AVClock::GetVideoPtsClock() {
+    return videoClk.pts;
+}
+
+void AVClock::SetVideoClock(int64_t pts) {
+    int64_t time = av_gettime_relative();
+    videoClk.pts = pts; // ms
+    videoClk.lastUpdated = time;
+}
+
+int64_t AVClock::GetAudioPtsClock() {
+    if (audioClk.lastUpdated == 0) {
+        return INT64_MIN;
     }
-    return time - master_clk.last_updated; // ms
-}
-
-void AVClock::set_master_clock(double time) {
-    if (time < 0) {
-        master_clk.last_updated = 0;
+    int64_t time = av_gettime_relative();
+    if (audioClk.lastUpdated == 0) {
+        audioClk.lastUpdated = time;
     }
-    master_clk.last_updated = time;
+    return audioClk.pts + (time - audioClk.lastUpdated); // ms
 }
 
-double AVClock::get_video_pts_clock() {
-    return video_clk.pts; // ms
+void AVClock::SetAudioClock(int64_t pts) {
+    int64_t time = av_gettime_relative();
+    audioClk.pts = pts; // ms
+    audioClk.lastUpdated = time;
 }
 
-void AVClock::set_video_clock(double pts) {
-    double time = av_gettime_relative() / 1000.0;
-    video_clk.pts = pts; // ms
-    video_clk.last_updated = time;
-}
-
-double AVClock::get_video_clock() {
-    return video_clk.pts; // ms
-}
-
-double AVClock::get_audio_clock() {
-    if (audio_clk.pts == 0) {
-        return 0;
-    }
-    double time = av_gettime_relative() / 1000.0;
-    if (audio_clk.last_updated == 0) {
-        audio_clk.last_updated = time;
-    }
-    return audio_clk.pts + (time - audio_clk.last_updated); // ms
-}
-
-double AVClock::get_audio_pts_clock() {
-    return audio_clk.pts; // ms
-}
-
-void AVClock::set_audio_clock(double pts) {
-    double time = av_gettime_relative() / 1000.0;
-    audio_clk.pts = pts; // ms
-    audio_clk.last_updated = time;
+void AVClock::Reset() {
+    videoClk = {0};
+    audioClk = {0};
 }
