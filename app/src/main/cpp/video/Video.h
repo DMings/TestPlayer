@@ -23,10 +23,6 @@ public:
 
     uint64_t getAvPacketSize();
 
-    void pause();
-
-    void resume();
-
     void release();
 
     int stream_id = -1;
@@ -43,14 +39,11 @@ private:
     int dst_line_size[4];
     pthread_t p_video_tid = 0;
     std::atomic_bool thread_finish = false;
-    std::atomic_bool is_pause = false;
-    pthread_cond_t pause_cond;
-    pthread_mutex_t pause_mutex;
     int64_t lastPts = 0;
 
     static PthreadSleep pthread_sleep;
 
-    uint synchronize_video(int64_t diffPts, int64_t pktDuration);
+    uint synchronize_video(int64_t lastPts, int64_t pktDuration);
 
     static void *videoProcess(void *arg);
 };

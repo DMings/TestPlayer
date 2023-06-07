@@ -23,10 +23,6 @@ public:
 
     int open_stream(AVFormatContext *fmt_ctx);
 
-    void pause();
-
-    void resume();
-
     void release();
 
     uint getCacheTime();
@@ -43,9 +39,6 @@ private:
     AudioPlay *playAudio;
     pthread_t p_audio_tid = 0;
     std::atomic_bool thread_finish = false;
-    pthread_cond_t pause_cond;
-    pthread_mutex_t pause_mutex;
-    std::atomic_bool is_pause = false;
     std::list<float> speedList;
     float pktDuration = 1024000.f / 48000.0f;
     float cacheSetTime = 200;

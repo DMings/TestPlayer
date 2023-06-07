@@ -32,9 +32,6 @@ public:
 
     virtual void release() = 0;
 
-    virtual void pause() = 0;
-
-    virtual void resume() = 0;
 public:
     pthread_cond_t c_cond;
     pthread_mutex_t c_mutex;

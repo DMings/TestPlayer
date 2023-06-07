@@ -5,16 +5,17 @@
 #include "../utils/FLog.h"
 
 BaseAV::BaseAV(): c_cond(), c_mutex(), pkt_list(){
-
+    pthread_mutex_init(&c_mutex, nullptr);
+    pthread_cond_init(&c_cond, nullptr);
 }
 
 int BaseAV::open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
                                AVFormatContext *fmt_ctx, enum AVMediaType type) {
     int ret, stream_index;
-    const AVCodec *dec = NULL;
-    AVDictionary *opts = NULL;
+    const AVCodec *dec = nullptr;
+    AVDictionary *opts = nullptr;
     AVStream *st;
-    ret = av_find_best_stream(fmt_ctx, type, -1, -1, NULL, 0);
+    ret = av_find_best_stream(fmt_ctx, type, -1, -1, nullptr, 0);
     if (ret < 0) {
         LOGI("Could not find %s stream in input file", av_get_media_type_string(type));
         return ret;
@@ -60,5 +61,5 @@ void BaseAV::clearList() {
 }
 
 BaseAV::~BaseAV(){
-
+    pthread_cond_destroy(&c_cond);
 }

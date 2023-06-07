@@ -19,6 +19,9 @@ PthreadSleep::~PthreadSleep() {
 
 
 void PthreadSleep::sleep(unsigned int ms) {
+    if (ms <= 0) {
+        return;
+    }
     struct timespec deadline;
     struct timeval now;
 

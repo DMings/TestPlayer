@@ -227,7 +227,7 @@ void FPlayer::Close() {
         avformat_close_input(&fmt_ctx);
     }
     pthread_mutex_unlock(&lock_mutex);
-    LOGI("avformat_close_input");
+    LOGI("avformat_close_input fmt_ctx: %p", fmt_ctx);
 }
 
 void FPlayer::Pause() {
@@ -236,12 +236,6 @@ void FPlayer::Pause() {
         av_read_pause(fmt_ctx);
     }
     pthread_mutex_unlock(&lock_mutex);
-    if (video && video->stream_id != -1) {
-        video->pause();
-    }
-    if (audio && audio->stream_id != -1) {
-        audio->pause();
-    }
 }
 
 void FPlayer::Resume() {
@@ -250,12 +244,6 @@ void FPlayer::Resume() {
         av_read_play(fmt_ctx);
     }
     pthread_mutex_unlock(&lock_mutex);
-    if (video && video->stream_id != -1) {
-        video->resume();
-    }
-    if (audio && audio->stream_id != -1) {
-        audio->resume();
-    }
 }
 
 int FPlayer::GetAudioCacheTimeMs() {

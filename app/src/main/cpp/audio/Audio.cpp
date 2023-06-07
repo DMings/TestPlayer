@@ -6,7 +6,6 @@
 #include "./render/AudioSpeed.h"
 
 Audio::Audio(AVClock *avClock, uint cacheTime) : cacheSetTime((float) cacheTime), avClock(avClock),
-                                                 pause_cond(), pause_mutex(),
                                                  speedList() {
     thread_finish = false;
     playAudio = nullptr;
@@ -135,18 +134,12 @@ void *Audio::audioProcess(void *arg) {
                     audio->avClock->curTimeUs = pts;
                     audio->avClock->SetAudioClock(pts);
 
-                    pthread_mutex_lock(&audio->pause_mutex);
-                    if (audio->is_pause) {
-                        pthread_cond_wait(&audio->pause_cond, &audio->pause_mutex);
-                    }
-                    pthread_mutex_unlock(&audio->pause_mutex);
                 }
             }
             av_packet_free(&audio_packet->avPacket);
             free_packet(audio_packet);
         }
     }
-    end:
     av_frame_free(&frame);
     audioSpeed->Flush();
     free(audioData);
@@ -227,8 +220,6 @@ float Audio::getSpeed(float listTime) {
 
 int Audio::open_stream(AVFormatContext *fmt_ctx) {
     stream_id = -1;
-    pthread_cond_init(&pause_cond, nullptr);
-    pthread_mutex_init(&pause_mutex, nullptr);
     int ret = open_codec_context(&stream_id, &av_dec_ctx,
                                  fmt_ctx, AVMEDIA_TYPE_AUDIO);
     LOGI("stream_id: %d", stream_id);
@@ -256,21 +247,6 @@ int Audio::open_stream(AVFormatContext *fmt_ctx) {
     return ret;
 }
 
-void Audio::pause() {
-    pthread_mutex_lock(&pause_mutex);
-    is_pause = true;
-    pthread_mutex_unlock(&pause_mutex);
-}
-
-void Audio::resume() {
-    LOGI("Audio Resume Start");
-    pthread_mutex_lock(&pause_mutex);
-    is_pause = false;
-    pthread_cond_signal(&pause_cond);
-    pthread_mutex_unlock(&pause_mutex);
-    LOGI("Audio Resume end");
-}
-
 void Audio::release() {
     LOGI("audio pthread_join wait");
     if (playAudio) {
@@ -290,9 +266,6 @@ void Audio::release() {
         avcodec_free_context(&av_dec_ctx);
         av_dec_ctx = nullptr;
     }
-    pthread_cond_destroy(&c_cond);
-    pthread_mutex_destroy(&pause_mutex);
-    pthread_cond_destroy(&pause_cond);
     stream_id = 0;
     av_stream = nullptr;
     av_dec_ctx = nullptr;
