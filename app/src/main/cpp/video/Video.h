@@ -13,39 +13,37 @@
 class Video : BaseAV {
 public:
 
-    Video(GLThread* glThread,AVClock* avClock);
+    Video(GLThread *glThread, AVClock *avClock);
+
+    int OpenStream(AVFormatContext *fmtCtx);
+
+    void PutAvPacket(FPacket *pkt);
+
+    uint64_t GetAvPacketSize();
+
+    int StreamIndex() const;
+
+    AVStream *Stream() const;
 
     ~Video();
 
-    int open_stream(AVFormatContext *fmt_ctx);
-
-    void putAvPacket(FPacket* pkt);
-
-    uint64_t getAvPacketSize();
-
-    void release();
-
-    int stream_id = -1;
-
-    AVClock* avClock;
-
-    AVCodecContext *av_dec_ctx = NULL;
-
-    AVStream *av_stream = NULL;
 private:
-    SwsContext *sws_context = NULL;
-    GLThread* glThread;
-    uint8_t *dst_data[4];
-    int dst_line_size[4];
-    pthread_t p_video_tid = 0;
-    std::atomic_bool thread_finish = false;
-    int64_t lastPts = 0;
+    AVCodecContext *avDecCtx_ = nullptr;
+    AVClock *avClock_ = nullptr;
+    int streamId_ = -1;
+    AVStream *avStream_ = nullptr;
+    SwsContext *swsContext_ = nullptr;
+    GLThread *glThread_;
+    uint8_t *dstData_[4]{};
+    int dstLineSize_[4]{};
+    pthread_t pVideoTid_ = 0;
+    std::atomic_bool threadFinish_ = false;
+    int64_t lastPts_ = 0;
+    PthreadSleep pthreadSleep_;
 
-    static PthreadSleep pthread_sleep;
+    uint SynchronizeVideo(int64_t lastPts, int64_t pktDuration);
 
-    uint synchronize_video(int64_t lastPts, int64_t pktDuration);
-
-    static void *videoProcess(void *arg);
+    static void *VideoThreadProcess(void *arg);
 };
 
 

@@ -81,11 +81,14 @@ void AudioPlay::Restart() {
         mStream->stop();
         mStream->close();
     }
-    mStream.reset();
-    Result result = mStream->start();
-    if (result == Result::OK) {
-    } else {
-        LOGW("Failed attempt at starting the playback stream. Error: %s", convertToText(result));
+    if (mStream) {
+        mStream.reset();
+        Result result = mStream->start();
+        if (result == Result::OK) {
+        } else {
+            LOGW("Failed attempt at starting the playback stream. Error: %s",
+                 convertToText(result));
+        }
     }
 }
 

@@ -7,6 +7,9 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import androidx.annotation.NonNull;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class FPlayer implements SurfaceHolder.Callback {
@@ -14,8 +17,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         public static int IDLE = 0;
         public static int PREPARING = 1;
         public static int PLAY = 2;
-        public static int PAUSE = 3;
-        public static int STOPING = 4;
+        public static int STOPPING = 4;
     }
 
     private String mUrl;
@@ -25,6 +27,7 @@ public class FPlayer implements SurfaceHolder.Callback {
     private long mPtr;
     private OnPlayListener mOnPlayListener;
     private long mTime;
+    private final AtomicBoolean mFinish = new AtomicBoolean(false);
 
     public FPlayer(SurfaceView surfaceView) {
         mPtr = newInstance();
@@ -37,34 +40,35 @@ public class FPlayer implements SurfaceHolder.Callback {
     public interface OnPlayListener {
         void onStart();
 
-        void onAudioCacheTime(long timeMs);
+        void onConnect();
 
-        void onEnd(boolean success);
+        void onAudioCacheTime(long timeMs, long maxTimeMs);
+
+        void onEnd();
 
     }
 
-    public void setOnPlayListener(OnPlayListener onPlayListener) {
+    public void setOnPlayListener(@NonNull OnPlayListener onPlayListener) {
         mOnPlayListener = onPlayListener;
     }
 
     public void start(final String url) {
         mUrl = url;
         if (mControlStatus.get() == PlayStatus.IDLE) {
+            if (mOnPlayListener != null) {
+                mOnPlayListener.onStart();
+            }
             mControlStatus.set(PlayStatus.PREPARING);
             mPlayHandler.post(mStartRunnable);
         }
     }
 
-    public void onResume() {
-        resume(mPtr);
-    }
-
-    public void onPause() {
-        pause(mPtr);
-    }
-
     public void onDestroy() {
-        stop(mPtr);
+        if (mFinish.get()) {
+            return;
+        }
+        mFinish.set(true);
+        release(mPtr);
         mPlayHandler.post(() -> {
             FLog.e("deleteInstance success");
             if (mPtr != 0) {
@@ -83,6 +87,23 @@ public class FPlayer implements SurfaceHolder.Callback {
         return getAudioCacheTime(mPtr);
     }
 
+    public long getAudioMaxCacheTime() {
+        return getAudioMaxCacheTime(mPtr);
+    }
+
+
+    public void syncNTP() {
+        syncNTP(mPtr);
+    }
+
+    public long getNTPDelta() {
+        return getNTPDelta(mPtr);
+    }
+
+    public boolean hasNTP() {
+        return hasNTP(mPtr);
+    }
+
     public int getPlayState() {
         return mControlStatus.get();
     }
@@ -90,31 +111,38 @@ public class FPlayer implements SurfaceHolder.Callback {
     private final Runnable mStartRunnable = new Runnable() {
         @Override
         public void run() {
-            int ret = FPlayer.open(mPtr, mUrl);
-            if (mOnPlayListener != null) {
-                mOnPlayListener.onStart();
+            if (mFinish.get()) {
+                return;
             }
+            int ret = FPlayer.open(mPtr, mUrl);
             FLog.i("PlayStatus.PREPARE: " + ret);
             if (ret >= 0) {
+                if (mOnPlayListener != null) {
+                    mOnPlayListener.onConnect();
+                }
                 mControlStatus.set(PlayStatus.PLAY);
-                while (FPlayer.handle(mPtr) >= 0) {
-                    if (System.currentTimeMillis() - mTime > 200) {
+                while (FPlayer.handle(mPtr) >= 0 && !mFinish.get()) {
+                    if (System.currentTimeMillis() - mTime > 95) {
                         if (mOnPlayListener != null) {
-                            mOnPlayListener.onAudioCacheTime(getAudioCacheTime());
+                            mOnPlayListener.onAudioCacheTime(getAudioCacheTime(), getAudioMaxCacheTime());
                         }
                         mTime = System.currentTimeMillis();
                     }
                 }
-                FPlayer.close(mPtr);
-                FLog.i("PlayStatus.STOP");
             }
-            mControlStatus.set(PlayStatus.STOPING);
-            FPlayer.stop(mPtr);
+            mControlStatus.set(PlayStatus.STOPPING);
+            FPlayer.close(mPtr);
             FLog.i("PlayStatus.IDLE");
             mControlStatus.set(PlayStatus.IDLE);
-            int finalRet = ret;
             if (mOnPlayListener != null) {
-                mOnPlayListener.onEnd(finalRet >= 0);
+                mOnPlayListener.onEnd();
+            }
+            if (!mFinish.get()) {
+                if (mOnPlayListener != null) {
+                    mOnPlayListener.onStart();
+                }
+                mControlStatus.set(PlayStatus.PREPARING);
+                mPlayHandler.postDelayed(mStartRunnable, 1000);
             }
         }
     };
@@ -159,15 +187,19 @@ public class FPlayer implements SurfaceHolder.Callback {
 
     private static native void close(long ptr);
 
-    private static native void pause(long ptr);
-
-    private static native void resume(long ptr);
-
-    private static native void stop(long ptr);
+    private static native void release(long ptr);
 
     private static native long getCurrentTime(long ptr);
 
     private static native long getAudioCacheTime(long ptr);
+
+    private static native long getAudioMaxCacheTime(long ptr);
+
+    private static native void syncNTP(long ptr);
+
+    private static native long getNTPDelta(long ptr);
+
+    private static native boolean hasNTP(long ptr);
 
     private static native void surfaceCreated(long ptr, Surface surface);
 

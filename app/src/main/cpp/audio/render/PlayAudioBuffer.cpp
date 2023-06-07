@@ -5,6 +5,7 @@
 #include "PlayAudioBuffer.h"
 #include "../../utils/FLog.h"
 #include <malloc.h>
+#include <thread>
 
 extern "C" {
 #include "libavutil/error.h"
@@ -20,6 +21,9 @@ PlayAudioBuffer::PlayAudioBuffer(int sampleRate, int channels) {
 }
 
 void PlayAudioBuffer::PutSamples(uint8_t *data, int nbSamples) {
+    while (DataSize() > 512 * 4 && !finish_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     std::unique_lock<std::mutex> lock(mtx_);
     int ret = AvAudioFifoWrite(reinterpret_cast<void **>(&data), nbSamples);
     if (ret < 0) {

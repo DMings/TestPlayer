@@ -5,81 +5,94 @@
 #include "Audio.h"
 #include "./render/AudioSpeed.h"
 
-Audio::Audio(AVClock *avClock, uint cacheTime) : cacheSetTime((float) cacheTime), avClock(avClock),
-                                                 speedList() {
-    thread_finish = false;
-    playAudio = nullptr;
-    cacheCurTime = cacheSetTime;
+Audio::Audio(AVClock *avClock, uint cacheTime) : cacheSetTime_((float) cacheTime), avClock(avClock),
+                                                 speedList_() {
+    threadFinish_ = false;
+    playAudio_ = nullptr;
+    cacheTime_ = cacheMaxTime_ = cacheSetTime_;
 }
 
-uint Audio::getCacheTime() {
-    return (uint) cacheCurTime;
+uint Audio::GetMaxCacheTime() const {
+    return (uint) cacheMaxTime_;
 }
 
-void Audio::putAvPacket(FPacket *pkt) {
-    if (stream_id != -1) {
-        pthread_mutex_lock(&c_mutex);
-        pkt_list.push_back(pkt);
-        pthread_cond_signal(&c_cond);
-        pthread_mutex_unlock(&c_mutex);
+uint Audio::GetCacheTime() const {
+    return (uint) cacheTime_;
+}
+
+int Audio::StreamIndex() const {
+    return streamId_;
+}
+
+AVStream *Audio::Stream() const {
+    return avStream_;
+}
+
+void Audio::PutAvPacket(FPacket *pkt) {
+    if (streamId_ != -1) {
+        pthread_mutex_lock(&cMutex_);
+        pktList_.push_back(pkt);
+        pthread_cond_signal(&cCond_);
+        pthread_mutex_unlock(&cMutex_);
     }
 }
 
-uint64_t Audio::getAvPacketSize() {
+uint64_t Audio::GetAvPacketSize() {
     uint64_t size;
-    pthread_mutex_lock(&c_mutex);
-    size = pkt_list.size();
-    pthread_mutex_unlock(&c_mutex);
+    pthread_mutex_lock(&cMutex_);
+    size = pktList_.size();
+    pthread_mutex_unlock(&cMutex_);
     return size;
 }
 
-void *Audio::audioProcess(void *arg) {
-    int ret = 0;
-    FPacket *audio_packet = nullptr;
+void *Audio::AudioThreadProcess(void *arg) {
+    int ret;
+    FPacket *audioPacket;
     auto *audio = (Audio *) arg;
     AVFrame *frame = av_frame_alloc();
-    int sampleRate = audio->av_dec_ctx->sample_rate;
-    int nbChannels = audio->av_dec_ctx->ch_layout.nb_channels;
-    int bytes = av_get_bytes_per_sample(audio->av_dec_ctx->sample_fmt);
+    int sampleRate = audio->avDecCtx_->sample_rate;
+    int nbChannels = audio->avDecCtx_->ch_layout.nb_channels;
+    int bytes = av_get_bytes_per_sample(audio->avDecCtx_->sample_fmt);
     auto *audioSpeed = new AudioSpeed(sampleRate, nbChannels);
     auto audioData = static_cast<uint8_t *>(memalign(64, sampleRate * nbChannels * bytes));
-    LOGI("audioProcess: run!!!");
+    LOGI("AudioThreadProcess: run!!!");
     float lastPlaySpeed = 1.0f;
-    float playSpeed = 1.0f;
-    float pktListTime = 0.f;
-    while (!audio->thread_finish) {
+    float playSpeed;
+    while (!audio->threadFinish_) {
         do {
-            audio_packet = nullptr;
-            pthread_mutex_lock(&audio->c_mutex);
-            if (!audio->pkt_list.empty()) {
-                audio_packet = audio->pkt_list.front();
-                audio->pkt_list.pop_front();
+            audioPacket = nullptr;
+            pthread_mutex_lock(&audio->cMutex_);
+            if (!audio->pktList_.empty()) {
+                audioPacket = audio->pktList_.front();
+                audio->pktList_.pop_front();
             } else {
-                pthread_cond_wait(&audio->c_cond, &audio->c_mutex);
-                if (!audio->pkt_list.empty()) {
-                    audio_packet = audio->pkt_list.front();
-                    audio->pkt_list.pop_front();
+                if (!audio->threadFinish_) {
+                    LOGI("audio pthread_cond_wait");
+                    pthread_cond_wait(&audio->cCond_, &audio->cMutex_);
+                }
+                if (!audio->pktList_.empty()) {
+                    audioPacket = audio->pktList_.front();
+                    audio->pktList_.pop_front();
                 }
             }
-            pktListTime = audio->getPktListTime();
-            pthread_mutex_unlock(&audio->c_mutex);
-        } while (audio_packet == nullptr && !audio->thread_finish);
-        if (audio_packet != nullptr) {
-            if (!audio->thread_finish) {
-                if (audio_packet->checkout_time) {
-                    avcodec_flush_buffers(audio->av_dec_ctx);
+            pthread_mutex_unlock(&audio->cMutex_);
+        } while (audioPacket == nullptr && !audio->threadFinish_);
+        if (audioPacket != nullptr) {
+            if (!audio->threadFinish_) {
+                if (audioPacket->checkout_time) {
+                    avcodec_flush_buffers(audio->avDecCtx_);
                 }
-                ret = avcodec_send_packet(audio->av_dec_ctx, audio_packet->avPacket);
+                ret = avcodec_send_packet(audio->avDecCtx_, audioPacket->avPacket);
                 if (ret < 0) {
                     LOGE("Error audio sending a packet for decoding pkt_list size: %ld",
-                         audio->pkt_list.size());
-                    av_packet_free(&audio_packet->avPacket);
-                    free_packet(audio_packet);
+                         audio->pktList_.size());
+                    av_packet_free(&audioPacket->avPacket);
+                    free_packet(audioPacket);
                     LOGE("Error Audio end");
                     break;
                 }
                 while (ret >= 0) {
-                    ret = avcodec_receive_frame(audio->av_dec_ctx, frame);
+                    ret = avcodec_receive_frame(audio->avDecCtx_, frame);
 
                     if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
@@ -92,17 +105,23 @@ void *Audio::audioProcess(void *arg) {
                         LOGE("audio legitimate decoding errors");
                         break;
                     }
-
-                    auto speedUnprocessedSampleTime = (float) (1000.0 * audioSpeed->NumUnprocessedSamples() /
-                                                     audio->av_dec_ctx->sample_rate);
-                    playSpeed = audio->getSpeed(pktListTime + speedUnprocessedSampleTime);
+                    size_t pktListSize = audio->pktList_.size();
+                    float pktListTime = audio->GetPktListTime();
+                    auto speedUnprocessedSampleTime = (float) (1000.0 *
+                                                               audioSpeed->NumUnprocessedSamples() /
+                                                               audio->avDecCtx_->sample_rate);
+                    audio->cacheTime_ = pktListTime + speedUnprocessedSampleTime + (float) (1000.0 *
+                                                                                            audio->playAudio_->SampleCount() /
+                                                                                            audio->avDecCtx_->sample_rate);
+                    playSpeed = audio->GetSpeed(pktListTime + speedUnprocessedSampleTime);
                     if (lastPlaySpeed != playSpeed) {
                         audioSpeed->SetSpeed(playSpeed);
                         lastPlaySpeed = playSpeed;
-//                        LOGI("playSpeed: %f numSamples: %d pkt_list size: %ld pktListTime: %f speedSamplesTime: %f",
-//                             playSpeed,
-//                             frame->nb_samples,
-//                             audio->pkt_list.size(), pktListTime, speedUnprocessedSampleTime);
+                        LOGI("playSpeed: %f numSamples: %d pkt_list size: %ld pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
+                             playSpeed,
+                             frame->nb_samples,
+                             audio->pktList_.size(), pktListTime, pktListSize,
+                             speedUnprocessedSampleTime);
                     }
 
                     int sendSamples = frame->nb_samples;
@@ -115,20 +134,16 @@ void *Audio::audioProcess(void *arg) {
                         if (numSamples <= 0) {
                             break;
                         }
-                        if (numSamples > 0 && audio->playAudio) {
-                            while (audio->playAudio->SampleCount() > 512 * 4) {
-                                usleep(1000);
+                        if (numSamples > 0 && audio->playAudio_) {
+                            if (audio->playAudio_->SampleCount() < 400) {
+                                LOGE("SampleCount: %d", audio->playAudio_->SampleCount());
                             }
-                            if (audio->playAudio->SampleCount() < 400) {
-                                LOGE("SampleCount: %d", audio->playAudio->SampleCount());
-                            }
-
-                            audio->playAudio->PutSamples(audioData, (int) numSamples);
+                            audio->playAudio_->PutSamples(audioData, (int) numSamples);
                         }
                     } while (true);
 
-                    int64_t pts = av_rescale_q(audio_packet->avPacket->pts,
-                                               audio_packet->avPacket->time_base,
+                    int64_t pts = av_rescale_q(audioPacket->avPacket->pts,
+                                               audioPacket->avPacket->time_base,
                                                AV_TIME_BASE_Q);
                     pts -= (int64_t) speedUnprocessedSampleTime * 1000;
                     audio->avClock->curTimeUs = pts;
@@ -136,21 +151,22 @@ void *Audio::audioProcess(void *arg) {
 
                 }
             }
-            av_packet_free(&audio_packet->avPacket);
-            free_packet(audio_packet);
+            av_packet_free(&audioPacket->avPacket);
+            free_packet(audioPacket);
         }
     }
     av_frame_free(&frame);
     audioSpeed->Flush();
     free(audioData);
-    LOGI("audioProcess end pkt_list size: %ld", audio->pkt_list.size());
+    LOGI("AudioThreadProcess end pkt_list size: %ld", audio->pktList_.size());
     return nullptr;
 }
 
-float Audio::getPktListTime() {
+float Audio::GetPktListTime() {
+    pthread_mutex_lock(&cMutex_);
     int64_t audioMaxTime = INT64_MIN;
     int64_t audioMinTime = INT64_MAX;
-    for (auto pkt: pkt_list) {
+    for (auto pkt: pktList_) {
         audioMaxTime = std::max(audioMaxTime,
                                 av_rescale_q(pkt->avPacket->pts, pkt->avPacket->time_base,
                                              AV_TIME_BASE_Q));
@@ -160,15 +176,21 @@ float Audio::getPktListTime() {
     }
     if (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
         audioMaxTime - audioMinTime != 0) {
-        return (float) (audioMaxTime - audioMinTime) / 1000.f;
+        float t = (float) (audioMaxTime - audioMinTime) / 1000.f;
+        if (t < (float) pktList_.size() * pktDuration_ / 2.f) {
+            LOGE("pkt_list Size calc: %f  t=> %f", (float) pktList_.size() * pktDuration_, t);
+        }
+        pthread_mutex_unlock(&cMutex_);
+        return t;
     } else {
-        return (float) pkt_list.size() * pktDuration;
+        pthread_mutex_unlock(&cMutex_);
+        return (float) pktList_.size() * pktDuration_;
     }
 }
 
-float Audio::getSpeed(float listTime) {
-    float maxTime = (float) cacheCurTime + 30;
-    float minTime = std::max((float) cacheCurTime / 2.5f, 146.f);
+float Audio::GetSpeed(float listTime) {
+    float maxTime = (float) cacheMaxTime_ + 30;
+    float minTime = std::max((float) cacheMaxTime_ / 2.5f, 146.f);
     minTime = std::min(minTime, 500.f);
     float speed = 1.0f;
     if (listTime > maxTime) {
@@ -183,133 +205,115 @@ float Audio::getSpeed(float listTime) {
         v = std::max(v, 0.3f);
         speed *= v;
     }
-    speedList.push_back(speed);
+    speedList_.push_back(speed);
     for (;;) {
-        if (speedList.size() > 2) {
-            speedList.pop_front();
+        if (speedList_.size() > 2) {
+            speedList_.pop_front();
         } else {
             break;
         }
     }
     float avgSpeed = 0.f;
-    for (auto s: speedList) {
+    for (auto s: speedList_) {
         avgSpeed += s;
     }
-    avgSpeed = avgSpeed / (float) speedList.size();
+    avgSpeed = avgSpeed / (float) speedList_.size();
     if (avgSpeed < 0.9f) {
-        reachMinTimeCount++;
+        reachMinTimeCount_++;
     }
     if (avgSpeed > 0.98f && avgSpeed < 1.02f) {
-        reachNormalTimeCount++;
+        reachNormalTimeCount_++;
     }
-    if (reachMinTimeCount >= 3) {
-        reachMinTimeCount = 0;
-        cacheCurTime *= 1.3f;
-        cacheCurTime = std::min(cacheCurTime, 1500.f);
+    if (reachMinTimeCount_ >= 3) {
+        reachMinTimeCount_ = 0;
+        cacheMaxTime_ *= 1.2f;
+        cacheMaxTime_ = std::min(cacheMaxTime_, 1500.f);
     }
-    if (reachNormalTimeCount >= 20) {
-        reachNormalTimeCount = 0;
-        reachMinTimeCount = 0;
-        if (cacheCurTime + 20.f > cacheSetTime) {
-            cacheCurTime -= (cacheCurTime - cacheSetTime) * 0.2f;
+    if (reachNormalTimeCount_ >= 20) {
+        reachNormalTimeCount_ = 0;
+        reachMinTimeCount_ = 0;
+        if (cacheMaxTime_ + 20.f > cacheSetTime_) {
+            cacheMaxTime_ -= (cacheMaxTime_ - cacheSetTime_) * 0.2f;
         }
     }
     return avgSpeed;
 }
 
 
-int Audio::open_stream(AVFormatContext *fmt_ctx) {
-    stream_id = -1;
-    int ret = open_codec_context(&stream_id, &av_dec_ctx,
-                                 fmt_ctx, AVMEDIA_TYPE_AUDIO);
-    LOGI("stream_id: %d", stream_id);
+int Audio::OpenStream(AVFormatContext *fmtCtx) {
+    streamId_ = -1;
+    int ret = OpenCodecContext(&streamId_, &avDecCtx_,
+                               fmtCtx, AVMEDIA_TYPE_AUDIO);
+    LOGI("stream_id: %d", streamId_);
     if (ret >= 0) {
-        av_stream = fmt_ctx->streams[stream_id];
+        avStream_ = fmtCtx->streams[streamId_];
     } else {
-        stream_id = -1;
+        streamId_ = -1;
     }
-    if (av_stream && isSampleRateValid(av_dec_ctx->sample_rate)
-        && av_dec_ctx->sample_fmt == AV_SAMPLE_FMT_S16) {
-        pktDuration = 1024000.f / (float) av_dec_ctx->sample_rate;
-        int channels = av_dec_ctx->ch_layout.nb_channels;
+    if (avStream_ && SampleRateValid(avDecCtx_->sample_rate)
+        && avDecCtx_->sample_fmt == AV_SAMPLE_FMT_S16) {
+        pktDuration_ = 1024000.f / (float) avDecCtx_->sample_rate;
+        int channels = avDecCtx_->ch_layout.nb_channels;
         LOGI("Audio -ac %d -ar %d byte %d fmt_name:%s", channels,
-             av_dec_ctx->sample_rate,
-             av_get_bytes_per_sample(av_dec_ctx->sample_fmt),
-             av_get_sample_fmt_name(av_dec_ctx->sample_fmt));
-        playAudio = new AudioPlay(av_dec_ctx->sample_rate, channels);
-        playAudio->Start();
-        pthread_create(&p_audio_tid, nullptr, audioProcess, this);
+             avDecCtx_->sample_rate,
+             av_get_bytes_per_sample(avDecCtx_->sample_fmt),
+             av_get_sample_fmt_name(avDecCtx_->sample_fmt));
+        playAudio_ = new AudioPlay(avDecCtx_->sample_rate, channels);
+        playAudio_->Start();
+        pthread_create(&pAudioTid_, nullptr, AudioThreadProcess, this);
     } else {
-        stream_id = -1;
-        LOGI("isSampleRateValid: %d AV_SAMPLE_FMT_S16: %d", av_dec_ctx->sample_rate,
-             (av_dec_ctx->sample_fmt == AV_SAMPLE_FMT_S16));
+        streamId_ = -1;
+        LOGI("SampleRateValid: %d AV_SAMPLE_FMT_S16: %d", avDecCtx_->sample_rate,
+             (avDecCtx_->sample_fmt == AV_SAMPLE_FMT_S16));
     }
     return ret;
 }
 
-void Audio::release() {
+Audio::~Audio() {
     LOGI("audio pthread_join wait");
-    if (playAudio) {
-        playAudio->Stop();
+    if (playAudio_) {
+        playAudio_->Stop();
     }
-    pthread_mutex_lock(&c_mutex);
-    thread_finish = true;
-    pthread_cond_signal(&c_cond);
-    pthread_mutex_unlock(&c_mutex);
-    if (p_audio_tid) {
-        pthread_join(p_audio_tid, 0);
+    pthread_mutex_lock(&cMutex_);
+    threadFinish_ = true;
+    pthread_cond_signal(&cCond_);
+    pthread_mutex_unlock(&cMutex_);
+    if (pAudioTid_) {
+        LOGI("audio pthread_join sss");
+        pthread_join(pAudioTid_, nullptr);
+        LOGI("audio pthread_join eee");
     }
-    clearList();
-    delete playAudio;
+    ClearList();
+    delete playAudio_;
     LOGI("audio pthread_join done");
-    if (av_dec_ctx) {
-        avcodec_free_context(&av_dec_ctx);
-        av_dec_ctx = nullptr;
+    if (avDecCtx_) {
+        avcodec_free_context(&avDecCtx_);
+        avDecCtx_ = nullptr;
     }
-    stream_id = 0;
-    av_stream = nullptr;
-    av_dec_ctx = nullptr;
+    streamId_ = 0;
+    avStream_ = nullptr;
+    avDecCtx_ = nullptr;
     LOGI("audio Release");
 }
 
-bool Audio::isSampleRateValid(int sampleRate) {
+bool Audio::SampleRateValid(int sampleRate) {
     bool success = false;
     switch (sampleRate) {
         case 8000:
-            success = true;
-            break;
         case 11025:
-            success = true;
-            break;
         case 16000:
-            success = true;
-            break;
         case 22050:
-            success = true;
-            break;
         case 24000:
-            success = true;
-            break;
         case 32000:
-            success = true;
-            break;
         case 44100:
-            success = true;
-            break;
         case 48000:
-            success = true;
-            break;
         case 64000:
-            success = true;
-            break;
         case 88200:
-            success = true;
-            break;
         case 96000:
-            success = true;
-            break;
         case 192000:
             success = true;
+            break;
+        default:
             break;
     }
     return success;

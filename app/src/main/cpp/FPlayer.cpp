@@ -5,22 +5,22 @@
 #include <unistd.h>
 #include "FPlayer.h"
 
-FPlayer::FPlayer() : lock_mutex(), avIOInterruptCB_(), timeoutMS_() {
-    glThread = new GLThread();
-    avClock = new AVClock();
-    pkt = nullptr;
-    fmt_ctx = nullptr;
+FPlayer::FPlayer() : lockMutex_(), avIOInterruptCB_(), timeoutMS_() {
+    glThread_ = new GLThread();
+    avClock_ = new AVClock();
+    pkt_ = nullptr;
+    fmtCtx_ = nullptr;
     avIOInterruptCB_ = {.callback = &FPlayer::TimeoutInterruptCb, .opaque = this};
 }
 
 GLThread *FPlayer::GetGLThread() {
-    return glThread;
+    return glThread_;
 }
 
 int FPlayer::Open(const char *url) {
-    running = true;
-    video = new Video(glThread, avClock);
-    audio = new Audio(avClock, cacheTimeMs);
+    running_ = true;
+    video_ = new Video(glThread_, avClock_);
+    audio_ = new Audio(avClock_, cacheTimeMs_);
     //
     auto protocolName = avio_find_protocol_name(url);
     LOGI("protocolName: %s", protocolName);
@@ -34,10 +34,10 @@ int FPlayer::Open(const char *url) {
     av_dict_set_int(&dic, "analyzeduration", 1 * AV_TIME_BASE, 0);
     av_dict_set_int(&dic, "fpsprobesize", 0, 0);
 
-    fmt_ctx = avformat_alloc_context();
+    fmtCtx_ = avformat_alloc_context();
     timeoutMS_ = GetCurrentTimeMs();
-    fmt_ctx->interrupt_callback = avIOInterruptCB_;
-    if (avformat_open_input(&fmt_ctx, url, fmt, &dic) < 0) {
+    fmtCtx_->interrupt_callback = avIOInterruptCB_;
+    if (avformat_open_input(&fmtCtx_, url, fmt, &dic) < 0) {
         LOGE("Could not open source file %s", url);
         return -1;
     }
@@ -46,90 +46,102 @@ int FPlayer::Open(const char *url) {
 
     timeoutMS_ = GetCurrentTimeMs();
     AVDictionary *find_dic = nullptr;
-    if (avformat_find_stream_info(fmt_ctx, &find_dic) < 0) {
+    if (avformat_find_stream_info(fmtCtx_, &find_dic) < 0) {
         LOGE("Could not find stream information");
         return -2;
     }
     LOGE("avformat_find_stream_info... cost time: %ld", (av_gettime_relative() / 1000 - timeMs));
-    audio->open_stream(fmt_ctx);
-    video->open_stream(fmt_ctx);
-    pkt = av_packet_alloc();
-
-    int ret = 0;
-
+    audio_->OpenStream(fmtCtx_);
+    video_->OpenStream(fmtCtx_);
+    pkt_ = av_packet_alloc();
+    // reset
+    avClock_->Reset();
+    findKeyFrame_ = false;
+    for (auto itr = pktList_.begin(); itr != pktList_.end();) {
+        auto *cPkt = (*itr);
+        av_packet_free(&cPkt);
+        itr = pktList_.erase(itr);
+    }
+    reachCacheTime_ = false;
+    vPts_ = -1;
+    aPts_ = -1;
     return 0;
 }
 
 int FPlayer::TimeoutInterruptCb(void *ctx) {
     auto player = static_cast<FPlayer *>(ctx);
-//    if ((GetCurrentTimeMs() - streamsPush->timeoutMS_) > FPlayer::SEND_TIMEOUT_MS) {
-//        LOGE("TimeoutInterruptCb.... timeout: %ld", (GetCurrentTimeMs() - streamsPush->timeoutMS_));
-//        return AVERROR_EXIT;
-//    }
-    return player->running ? 0 : AVERROR_EXIT;
+    if ((GetCurrentTimeMs() - player->timeoutMS_) > FPlayer::READ_TIMEOUT_MS) {
+        LOGE("TimeoutInterruptCb.... timeout: %ld", (GetCurrentTimeMs() - player->timeoutMS_));
+        return AVERROR_EXIT;
+    }
+    if (!player->running_) {
+        LOGE("TimeoutInterruptCb quit!!!");
+    }
+    return player->running_ ? 0 : AVERROR_EXIT;
 }
 
 int FPlayer::Handle() {
     int ret = -1;
-    if (running) {
+    if (running_) {
         timeoutMS_ = GetCurrentTimeMs();
 //        __TSC__(av_read_frame);
-        ret = av_read_frame(fmt_ctx, pkt);
+        ret = av_read_frame(fmtCtx_, pkt_);
 //        __TEC_LIMIT__(av_read_frame, 10);
         if (ret == 0) {
-            if (pkt->stream_index == video->stream_id || pkt->stream_index == audio->stream_id) {
+            if (pkt_->stream_index == video_->StreamIndex() ||
+                pkt_->stream_index == audio_->StreamIndex()) {
 
-                if (pkt->stream_index == video->stream_id) {
-                    if (pkt->pts <= vPts) {
-                        vPts++;
-                        pkt->pts = vPts;
+                if (pkt_->stream_index == video_->StreamIndex()) {
+                    if (pkt_->pts <= vPts_) {
+                        vPts_++;
+                        pkt_->pts = vPts_;
                     }
-                    vPts = pkt->pts;
+                    vPts_ = pkt_->pts;
                 } else {
-                    if (pkt->pts <= aPts) {
-                        aPts++;
-                        pkt->pts = aPts;
+                    if (pkt_->pts <= aPts_) {
+                        aPts_++;
+                        pkt_->pts = aPts_;
                     }
-                    aPts = pkt->pts;
+                    aPts_ = pkt_->pts;
                 }
 
-                if (pkt->stream_index == video->stream_id) {
-                    pkt->time_base = video->av_stream->time_base;
-                    if (pkt->flags == AV_PKT_FLAG_KEY && !findKeyFrame) {
-                        findKeyFrame = true;
-                        int64_t videoKeyPts = av_rescale_q(pkt->pts, pkt->time_base,
+                if (pkt_->stream_index == video_->StreamIndex()) {
+                    pkt_->time_base = video_->Stream()->time_base;
+                    if (pkt_->flags == AV_PKT_FLAG_KEY && !findKeyFrame_) {
+                        findKeyFrame_ = true;
+                        int64_t videoKeyPts = av_rescale_q(pkt_->pts, pkt_->time_base,
                                                            AV_TIME_BASE_Q);
-                        LOGE("findKeyFrame key pkt: %d pkt->pts: %ld pts: %ld", pkt->stream_index,
-                             pkt->pts, videoKeyPts);
-                        LOGE("pktList now: %ld videoKeyPts: %ld", pktList.size(), videoKeyPts);
-                        for (auto it = pktList.begin(); it != pktList.end();) {
+                        LOGE("findKeyFrame key pkt: %d pkt->pts: %ld pts: %ld", pkt_->stream_index,
+                             pkt_->pts, videoKeyPts);
+                        LOGE("pktList now: %ld videoKeyPts: %ld", pktList_.size(), videoKeyPts);
+                        for (auto it = pktList_.begin(); it != pktList_.end();) {
                             auto *d = (*it);
                             if (av_rescale_q(d->pts, d->time_base, AV_TIME_BASE_Q) < videoKeyPts) {
                                 av_packet_free(&d);
-                                it = pktList.erase(it);
+                                it = pktList_.erase(it);
                             } else {
                                 it++;
                             }
                         }
-                        reachCacheTime = true;
-                        LOGE("pktList.size finish: %ld", pktList.size());
+                        reachCacheTime_ = true;
+                        LOGE("pktList.size finish: %ld", pktList_.size());
                     }
                 } else {
-                    pkt->time_base = audio->av_stream->time_base;
+                    pkt_->time_base = audio_->Stream()->time_base;
                 }
-                if (!findKeyFrame || reachCacheTime) {
+                if (!findKeyFrame_ || reachCacheTime_) {
 
                     auto clonePkt = av_packet_alloc();
-                    av_packet_move_ref(clonePkt, pkt);
-                    pktList.push_back(clonePkt);
+                    av_packet_move_ref(clonePkt, pkt_);
+                    pktList_.push_back(clonePkt);
 
-                    if (reachCacheTime) {
+                    if (reachCacheTime_) {
                         int64_t videoMaxTime = INT64_MIN;
                         int64_t videoMinTime = INT64_MAX;
                         int64_t audioMaxTime = INT64_MIN;
                         int64_t audioMinTime = INT64_MAX;
-                        for (auto cPkt: pktList) {
-                            if (cPkt->stream_index == video->stream_id) {
+                        for (auto cPkt: pktList_) {
+                            if (cPkt->stream_index == video_->StreamIndex()) {
                                 videoMaxTime = std::max(videoMaxTime,
                                                         av_rescale_q(cPkt->pts, cPkt->time_base,
                                                                      AV_TIME_BASE_Q));
@@ -146,32 +158,32 @@ int FPlayer::Handle() {
                             }
                         }
 
-                        if (cacheTimeMs == 0 ||
+                        if (cacheTimeMs_ == 0 ||
                             (videoMaxTime != INT64_MIN && videoMinTime != INT64_MAX &&
-                             videoMaxTime - videoMinTime > cacheTimeMs * 1000) &&
+                             videoMaxTime - videoMinTime > cacheTimeMs_ * 1000) &&
                             (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
-                             audioMaxTime - audioMinTime > cacheTimeMs * 1000)) {
-                            reachCacheTime = false;
-                            for (auto itr = pktList.begin(); itr != pktList.end();) {
+                             audioMaxTime - audioMinTime > cacheTimeMs_ * 1000)) {
+                            reachCacheTime_ = false;
+                            for (auto itr = pktList_.begin(); itr != pktList_.end();) {
                                 auto *cPkt = (*itr);
                                 FPacket *f_pkt = alloc_packet();
                                 f_pkt->avPacket = cPkt;
-                                if (cPkt->stream_index == video->stream_id) {
-                                    video->putAvPacket(f_pkt);
+                                if (cPkt->stream_index == video_->StreamIndex()) {
+                                    video_->PutAvPacket(f_pkt);
                                 } else {
-                                    audio->putAvPacket(f_pkt);
+                                    audio_->PutAvPacket(f_pkt);
                                 }
-                                itr = pktList.erase(itr);
+                                itr = pktList_.erase(itr);
                             }
                             LOGE("videoTime: %ld", videoMaxTime - videoMinTime);
                             LOGE("audioTime: %ld", audioMaxTime - audioMinTime);
-                            LOGE("video getAvPacketSize send: %ld", video->getAvPacketSize());
-                            LOGE("audio getAvPacketSize send: %ld", audio->getAvPacketSize());
+                            LOGE("video GetAvPacketSize send: %ld", video_->GetAvPacketSize());
+                            LOGE("audio GetAvPacketSize send: %ld", audio_->GetAvPacketSize());
                         } else {
                             int videoCount = 0;
                             int audioCount = 0;
-                            for (auto cPkt: pktList) {
-                                if (cPkt->stream_index == video->stream_id) {
+                            for (auto cPkt: pktList_) {
+                                if (cPkt->stream_index == video_->StreamIndex()) {
                                     videoCount++;
                                 } else {
                                     audioCount++;
@@ -179,27 +191,27 @@ int FPlayer::Handle() {
                             }
 
                             if (videoCount >= 60 || audioCount >= 200) {
-                                for (auto itr = pktList.begin(); itr != pktList.end();) {
+                                for (auto itr = pktList_.begin(); itr != pktList_.end();) {
                                     auto *cPkt = (*itr);
                                     av_packet_free(&cPkt);
-                                    itr = pktList.erase(itr);
+                                    itr = pktList_.erase(itr);
                                 }
                             }
                         }
                     }
                 } else {
                     AVPacket *clonePkt = av_packet_alloc();
-                    av_packet_move_ref(clonePkt, pkt);
+                    av_packet_move_ref(clonePkt, pkt_);
                     FPacket *f_pkt = alloc_packet();
                     f_pkt->avPacket = clonePkt;
-                    if (clonePkt->stream_index == video->stream_id) {
-                        video->putAvPacket(f_pkt);
+                    if (clonePkt->stream_index == video_->StreamIndex()) {
+                        video_->PutAvPacket(f_pkt);
                     } else {
-                        audio->putAvPacket(f_pkt);
+                        audio_->PutAvPacket(f_pkt);
                     }
                 }
             }
-            av_packet_unref(pkt);
+            av_packet_unref(pkt_);
         } else {
             ret = -1;
         }
@@ -208,60 +220,44 @@ int FPlayer::Handle() {
 }
 
 void FPlayer::Close() {
-    LOGE("play Stop---------------------->");
-    if (audio) {
-        audio->release();
+    LOGE("play Close---------------------->");
+    delete audio_;
+    delete video_;
+    audio_ = nullptr;
+    video_ = nullptr;
+    LOGE("audio null  video null");
+    pthread_mutex_lock(&lockMutex_);
+    av_packet_free(&pkt_);
+    if (fmtCtx_) {
+        avformat_close_input(&fmtCtx_);
     }
-    if (video) {
-        video->release();
-    }
-    delete audio;
-    delete video;
-    audio = nullptr;
-    video = nullptr;
-    LOGE("audio.Stop()  video.Release()");
-    pthread_mutex_lock(&lock_mutex);
-    if (fmt_ctx) {
-//        avformat_flush(fmt_ctx); //ff_read_frame_flush
-        av_packet_free(&pkt);
-        avformat_close_input(&fmt_ctx);
-    }
-    pthread_mutex_unlock(&lock_mutex);
-    LOGI("avformat_close_input fmt_ctx: %p", fmt_ctx);
-}
-
-void FPlayer::Pause() {
-    pthread_mutex_lock(&lock_mutex);
-    if (fmt_ctx) {
-        av_read_pause(fmt_ctx);
-    }
-    pthread_mutex_unlock(&lock_mutex);
-}
-
-void FPlayer::Resume() {
-    pthread_mutex_lock(&lock_mutex);
-    if (fmt_ctx) {
-        av_read_play(fmt_ctx);
-    }
-    pthread_mutex_unlock(&lock_mutex);
+    pthread_mutex_unlock(&lockMutex_);
+    LOGI("avformat_close_input fmt_ctx: %p", fmtCtx_);
 }
 
 int FPlayer::GetAudioCacheTimeMs() {
-    if (audio && audio->stream_id != -1) {
-        return (int) audio->getCacheTime();
+    if (audio_ && audio_->StreamIndex() != -1) {
+        return (int) audio_->GetCacheTime();
     }
-    return (int) cacheTimeMs;
+    return (int) cacheTimeMs_;
+}
+
+int FPlayer::GetAudioMaxCacheTimeMs() {
+    if (audio_ && audio_->StreamIndex() != -1) {
+        return (int) audio_->GetMaxCacheTime();
+    }
+    return (int) cacheTimeMs_;
 }
 
 int64_t FPlayer::GetCurTimeMs() {
-    return avClock->curTimeUs;
+    return avClock_->curTimeUs;
 }
 
-void FPlayer::Stop() {
-    running = false;
+void FPlayer::Release() {
+    running_ = false;
 }
 
 FPlayer::~FPlayer() {
-    delete avClock;
-    delete glThread;
+    delete avClock_;
+    delete glThread_;
 }

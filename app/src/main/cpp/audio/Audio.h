@@ -13,38 +13,45 @@ class Audio : BaseAV {
 public:
     Audio(AVClock *avClock, uint cacheTime);
 
-    void putAvPacket(FPacket *pkt);
+    void PutAvPacket(FPacket *pkt);
 
-    uint64_t getAvPacketSize();
+    uint64_t GetAvPacketSize();
 
-    float getPktListTime();
+    float GetPktListTime();
 
-    float getSpeed(float listTime);
+    float GetSpeed(float listTime);
 
-    int open_stream(AVFormatContext *fmt_ctx);
+    int OpenStream(AVFormatContext *fmtCtx);
 
-    void release();
+    uint GetMaxCacheTime() const;
 
-    uint getCacheTime();
+    uint GetCacheTime() const;
 
-    AVStream *av_stream = nullptr;
-    AVCodecContext *av_dec_ctx = nullptr;
-    int stream_id = -1;
+    int StreamIndex() const;
+
+    AVStream *Stream() const;
+
+    ~Audio();
+
 private:
-    bool isSampleRateValid(int sampleRate);
-
-    static void *audioProcess(void *arg);
-
+    AVCodecContext *avDecCtx_ = nullptr;
+    AVStream *avStream_ = nullptr;
+    int streamId_ = -1;
     AVClock *avClock = nullptr;
-    AudioPlay *playAudio;
-    pthread_t p_audio_tid = 0;
-    std::atomic_bool thread_finish = false;
-    std::list<float> speedList;
-    float pktDuration = 1024000.f / 48000.0f;
-    float cacheSetTime = 200;
-    float cacheCurTime = 200;
-    uint reachMinTimeCount = 0;
-    uint reachNormalTimeCount = 0;
+    AudioPlay *playAudio_ = nullptr;
+    pthread_t pAudioTid_ = 0;
+    std::atomic_bool threadFinish_ = false;
+    std::list<float> speedList_;
+    float pktDuration_ = 1024000.f / 48000.0f;
+    float cacheSetTime_ = 200;
+    float cacheMaxTime_ = 200;
+    float cacheTime_ = 200;
+    uint reachMinTimeCount_ = 0;
+    uint reachNormalTimeCount_ = 0;
+
+    static bool SampleRateValid(int sampleRate);
+
+    static void *AudioThreadProcess(void *arg);
 };
 
 

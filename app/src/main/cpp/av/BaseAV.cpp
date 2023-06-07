@@ -4,13 +4,13 @@
 #include "BaseAV.h"
 #include "../utils/FLog.h"
 
-BaseAV::BaseAV(): c_cond(), c_mutex(), pkt_list(){
-    pthread_mutex_init(&c_mutex, nullptr);
-    pthread_cond_init(&c_cond, nullptr);
+BaseAV::BaseAV() : cCond_(), cMutex_(), pktList_() {
+    pthread_mutex_init(&cMutex_, nullptr);
+    pthread_cond_init(&cCond_, nullptr);
 }
 
-int BaseAV::open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
-                               AVFormatContext *fmt_ctx, enum AVMediaType type) {
+int BaseAV::OpenCodecContext(int *stream_idx, AVCodecContext **dec_ctx,
+                             AVFormatContext *fmt_ctx, enum AVMediaType type) {
     int ret, stream_index;
     const AVCodec *dec = nullptr;
     AVDictionary *opts = nullptr;
@@ -46,20 +46,21 @@ int BaseAV::open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
             return ret;
         }
         *stream_idx = stream_index;
-        LOGI("(*dec_ctx) => %d %d", (*dec_ctx)->time_base.num, (*dec_ctx)->time_base.den);
+        LOGI("OpenCodecContext type: %d => %d %d", type, (*dec_ctx)->time_base.num,
+             (*dec_ctx)->time_base.den);
     }
     return 0;
 }
 
-void BaseAV::clearList() {
+void BaseAV::ClearList() {
     std::list<FPacket *>::iterator it;
-    for (it = pkt_list.begin(); it != pkt_list.end();) {
+    for (it = pktList_.begin(); it != pktList_.end();) {
         av_packet_free(&(*it)->avPacket);
         free_packet(*it);
-        pkt_list.erase(it++);
+        pktList_.erase(it++);
     }
 }
 
-BaseAV::~BaseAV(){
-    pthread_cond_destroy(&c_cond);
+BaseAV::~BaseAV() {
+    pthread_cond_destroy(&cCond_);
 }

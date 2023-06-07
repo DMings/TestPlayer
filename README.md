@@ -77,12 +77,12 @@ RGBA buffer转gl纹理并绘制显示
 同步算法  
 
 ```
-uint Video::synchronize_video(double pkt_duration) { // us
+uint Video::SynchronizeVideo(double pkt_duration) { // us
     uint wanted_delay = 0;
     double diff_ms;
     double duration;
     bool is_seeking;
-    AVRational rational = av_stream->r_frame_rate;
+    AVRational rational = avStream_->r_frame_rate;
     int video_base = (int) 1000.0 * rational.den / rational.num;
     if (video_base) {
         duration = video_base;

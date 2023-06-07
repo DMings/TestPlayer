@@ -8,32 +8,27 @@
 #include "audio/Audio.h"
 #include "video/Video.h"
 
-enum PlayStatus {
-    IDLE, PREPARE, PLAYING, STOPPING,
-};
-
 class FPlayer {
+
 private:
-    AVFormatContext *fmt_ctx = nullptr;
-    Video *video = nullptr;
-    Audio *audio = nullptr;
-    GLThread *glThread;
-    AVClock *avClock;
-    AVPacket *pkt;
-    std::atomic_bool running = false;
+    AVFormatContext *fmtCtx_ = nullptr;
+    Video *video_ = nullptr;
+    Audio *audio_ = nullptr;
+    GLThread *glThread_ = nullptr;
+    AVClock *avClock_ = nullptr;
+    AVPacket *pkt_ = nullptr;
+    std::atomic_bool running_ = false;
     AVIOInterruptCB avIOInterruptCB_;
     std::atomic_int64_t timeoutMS_;
-    pthread_mutex_t lock_mutex;
-    int64_t cacheTimeMs = 220;
-
-    bool findKeyFrame = false;
-    std::list<AVPacket *> pktList;
-    bool reachCacheTime = false;
-    int64_t vPts = -1;
-    int64_t aPts = -1;
+    pthread_mutex_t lockMutex_;
+    int64_t cacheTimeMs_ = 220;
+    bool findKeyFrame_ = false;
+    std::list<AVPacket *> pktList_;
+    bool reachCacheTime_ = false;
+    int64_t vPts_ = -1;
+    int64_t aPts_ = -1;
 public:
-    static constexpr int SEND_TIMEOUT_MS = 3000;
-    static constexpr int SEND_BUFFER_TIME_MS = 3000;
+    static constexpr int READ_TIMEOUT_MS = 3000;
 
     static int TimeoutInterruptCb(void *ctx);
 
@@ -47,15 +42,13 @@ public:
 
     int Handle();
 
-    void Pause();
-
-    void Resume();
-
     int64_t GetCurTimeMs();
+
+    int GetAudioMaxCacheTimeMs();
 
     int GetAudioCacheTimeMs();
 
-    void Stop();
+    void Release();
 
     void Close();
 

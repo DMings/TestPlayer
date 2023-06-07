@@ -28,21 +28,21 @@ public:
 
     ~BaseAV();
 
-    virtual void putAvPacket(FPacket* pkt) = 0;
+    virtual void PutAvPacket(FPacket* pkt) = 0;
 
-    virtual void release() = 0;
+    virtual int StreamIndex() const = 0;
 
-public:
-    pthread_cond_t c_cond;
-    pthread_mutex_t c_mutex;
-    std::list<FPacket *> pkt_list;
+    virtual AVStream* Stream() const = 0;
 
-public:
+    int OpenCodecContext(int *stream_idx, AVCodecContext **dec_ctx,
+                         AVFormatContext *fmt_ctx, AVMediaType type);
 
-     int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
-                                  AVFormatContext *fmt_ctx, AVMediaType type);
+    void ClearList();
 
-     void clearList();
+protected:
+    pthread_cond_t cCond_;
+    pthread_mutex_t cMutex_;
+    std::list<FPacket *> pktList_;
 
 };
 

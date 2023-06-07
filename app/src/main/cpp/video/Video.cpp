@@ -4,22 +4,25 @@
 
 #include "Video.h"
 
-PthreadSleep Video::pthread_sleep;
-
-Video::Video(GLThread *glThread, AVClock *avClock) : avClock(avClock) {
-    this->glThread = glThread;
-    dst_data[0] = nullptr;
-    thread_finish = false;
+Video::Video(GLThread *glThread, AVClock *avClock) : avClock_(avClock),
+                                                     pthreadSleep_() {
+    this->glThread_ = glThread;
+    threadFinish_ = false;
 }
 
-Video::~Video() {
+int Video::StreamIndex() const {
+    return streamId_;
 }
 
-uint Video::synchronize_video(int64_t lastPts, int64_t pktDuration) { // ms
-    uint wanted_delay = 0;
+AVStream *Video::Stream() const {
+    return avStream_;
+}
+
+uint Video::SynchronizeVideo(int64_t lastPts, int64_t pktDuration) { // ms
+    uint wanted_delay;
     int64_t diff_ms;
     int64_t duration;
-    AVRational rational = av_stream->r_frame_rate;
+    AVRational rational = avStream_->r_frame_rate;
     if (pktDuration) {
         duration = pktDuration;
     } else {
@@ -31,10 +34,10 @@ uint Video::synchronize_video(int64_t lastPts, int64_t pktDuration) { // ms
     }
     duration = duration < 200 ? duration : 200;
 
-    if (avClock->GetAudioPtsClock() == INT64_MIN) {
-        diff_ms = avClock->GetVideoPtsClock() - lastPts;
+    if (avClock_->GetAudioPtsClock() == INT64_MIN) {
+        diff_ms = avClock_->GetVideoPtsClock() - lastPts;
     } else {
-        diff_ms = (avClock->GetVideoPtsClock() - avClock->GetAudioPtsClock()) / 1000;
+        diff_ms = (avClock_->GetVideoPtsClock() - avClock_->GetAudioPtsClock()) / 1000;
     }
 
     if (diff_ms < 0) {
@@ -45,66 +48,66 @@ uint Video::synchronize_video(int64_t lastPts, int64_t pktDuration) { // ms
     return wanted_delay;
 }
 
-void Video::putAvPacket(FPacket *pkt) {
-    if (stream_id != -1) {
-        pthread_mutex_lock(&c_mutex);
-        pkt_list.push_back(pkt);
-        pthread_cond_signal(&c_cond);
-        pthread_mutex_unlock(&c_mutex);
+void Video::PutAvPacket(FPacket *pkt) {
+    if (streamId_ != -1) {
+        pthread_mutex_lock(&cMutex_);
+        pktList_.push_back(pkt);
+        pthread_cond_signal(&cCond_);
+        pthread_mutex_unlock(&cMutex_);
     }
 }
 
-uint64_t Video::getAvPacketSize() {
+uint64_t Video::GetAvPacketSize() {
     uint64_t size;
-    pthread_mutex_lock(&c_mutex);
-    size = pkt_list.size();
-    pthread_mutex_unlock(&c_mutex);
+    pthread_mutex_lock(&cMutex_);
+    size = pktList_.size();
+    pthread_mutex_unlock(&cMutex_);
     return size;
 }
 
-void *Video::videoProcess(void *arg) {
+void *Video::VideoThreadProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
-    int ret = 0;
+    int ret;
     auto *video = (Video *) arg;
-    FPacket *video_packet = nullptr;
-    video->glThread->setParams(video->dst_data[0], video->av_dec_ctx->width,
-                               video->av_dec_ctx->height);
-    LOGI("videoProcess: run!!!");
-    size_t listSize = 0;
-    pthread_sleep.reset();
-    while (!video->thread_finish) {
+    FPacket *videoPacket;
+    video->glThread_->setParams(video->dstData_[0], video->avDecCtx_->width,
+                                video->avDecCtx_->height);
+    LOGI("VideoThreadProcess: run!!!");
+    video->pthreadSleep_.reset();
+    while (!video->threadFinish_) {
         do {
-            video_packet = nullptr;
-            pthread_mutex_lock(&video->c_mutex);
-            if (!video->pkt_list.empty()) {
-                video_packet = video->pkt_list.front();
-                video->pkt_list.pop_front();
+            videoPacket = nullptr;
+            pthread_mutex_lock(&video->cMutex_);
+            if (!video->pktList_.empty()) {
+                videoPacket = video->pktList_.front();
+                video->pktList_.pop_front();
             } else {
-                pthread_cond_wait(&video->c_cond, &video->c_mutex);
-                if (!video->pkt_list.empty()) {
-                    video_packet = video->pkt_list.front();
-                    video->pkt_list.pop_front();
+                if (!video->threadFinish_) {
+                    pthread_cond_wait(&video->cCond_, &video->cMutex_);
+                }
+                if (!video->pktList_.empty()) {
+                    videoPacket = video->pktList_.front();
+                    video->pktList_.pop_front();
                 }
             }
-            listSize = video->pkt_list.size();
-            pthread_mutex_unlock(&video->c_mutex);
-        } while (video_packet == nullptr && !video->thread_finish);
-        if (video_packet != nullptr) {
-            if (!video->thread_finish) {
-                if (video_packet->checkout_time) {
-                    avcodec_flush_buffers(video->av_dec_ctx);
+            pthread_mutex_unlock(&video->cMutex_);
+        } while (videoPacket == nullptr && !video->threadFinish_);
+        if (videoPacket != nullptr) {
+            if (!video->threadFinish_) {
+                if (videoPacket->checkout_time) {
+                    avcodec_flush_buffers(video->avDecCtx_);
                 }
-                ret = avcodec_send_packet(video->av_dec_ctx, video_packet->avPacket);
+                ret = avcodec_send_packet(video->avDecCtx_, videoPacket->avPacket);
                 if (ret < 0) {
                     LOGE("Error video sending a packet for decoding video->pkt_list size: %ld",
-                         video->pkt_list.size());
-                    av_packet_free(&video_packet->avPacket);
-                    free_packet(video_packet);
+                         video->pktList_.size());
+                    av_packet_free(&videoPacket->avPacket);
+                    free_packet(videoPacket);
                     LOGE("Error video end");
                     break;
                 }
                 while (ret >= 0) {
-                    ret = avcodec_receive_frame(video->av_dec_ctx, frame);
+                    ret = avcodec_receive_frame(video->avDecCtx_, frame);
                     if (ret == AVERROR(EAGAIN)) {
 //                LOGE("ret == AVERROR(EAGAIN)");
                         break;
@@ -118,23 +121,23 @@ void *Video::videoProcess(void *arg) {
                     }
                     //  用 st 上的时基才对 av_stream
                     int64_t pts = av_rescale_q(frame->pts,
-                                               video->av_stream->time_base,
+                                               video->avStream_->time_base,
                                                AV_TIME_BASE_Q);// us
 
                     int64_t pkt_duration = av_rescale_q(frame->duration,
-                                                        video->av_stream->time_base,
+                                                        video->avStream_->time_base,
                                                         AV_TIME_BASE_Q);// us
-                    video->glThread->lockDraw();
-                    ret = sws_scale(video->sws_context,
+                    video->glThread_->lockDraw();
+                    ret = sws_scale(video->swsContext_,
                                     (const uint8_t *const *) frame->data, frame->linesize,
-                                    0, video->av_dec_ctx->height,
-                                    video->dst_data, video->dst_line_size); // lock
-                    video->glThread->unlockDraw();
+                                    0, video->avDecCtx_->height,
+                                    video->dstData_, video->dstLineSize_); // lock
+                    video->glThread_->unlockDraw();
 
-                    video->avClock->SetVideoClock(pts);
+                    video->avClock_->SetVideoClock(pts);
 
-                    int delay = video->synchronize_video(video->lastPts / 1000,
-                                                         pkt_duration / 1000); // ms
+                    uint delay = video->SynchronizeVideo(video->lastPts_ / 1000,
+                                                        pkt_duration / 1000); // ms
 //                    LOGI("audio GetAudioPtsClock: %ld GetVideoPtsClock: %ld delay: %d real diff: %ld listSize: %ld",
 //                         video->avClock->GetAudioPtsClock() / 1000,
 //                         video->avClock->GetVideoPtsClock() / 1000,
@@ -142,26 +145,26 @@ void *Video::videoProcess(void *arg) {
 //                         (video->avClock->GetVideoPtsClock() - video->avClock->GetAudioPtsClock()) /
 //                         1000,
 //                         listSize);
-                    video->lastPts = pts;
-                    pthread_sleep.sleep((uint) delay);
-                    video->glThread->draw();
+                    video->lastPts_ = pts;
+                    video->pthreadSleep_.sleep((uint) delay);
+                    video->glThread_->draw();
                 }
             }
-            av_packet_free(&video_packet->avPacket);
-            free_packet(video_packet);
+            av_packet_free(&videoPacket->avPacket);
+            free_packet(videoPacket);
         }
     }
-    video->glThread->setParams(nullptr, 1, 1);
-    video->glThread->drawBackground();
+    video->glThread_->setParams(nullptr, 1, 1);
+    video->glThread_->drawBackground();
     av_frame_free(&frame);
-    LOGI("videoProcess end video->pkt_list size: %ld", video->pkt_list.size());
+    LOGI("VideoThreadProcess end video->pkt_list size: %ld", video->pktList_.size());
     return nullptr;
 }
 
 
-int Video::open_stream(AVFormatContext *fmt_ctx) {
-    int ret = open_codec_context(&stream_id, &av_dec_ctx,
-                                 fmt_ctx, AVMEDIA_TYPE_VIDEO);
+int Video::OpenStream(AVFormatContext *fmtCtx) {
+    int ret = OpenCodecContext(&streamId_, &avDecCtx_,
+                               fmtCtx, AVMEDIA_TYPE_VIDEO);
     if (ret >= 0) {
 //        int nb_cpu_s = av_cpu_count();
 //        if (nb_cpu_s == 0) {
@@ -169,58 +172,58 @@ int Video::open_stream(AVFormatContext *fmt_ctx) {
 //        }
 //        av_dec_ctx->thread_count = nb_cpu_s;
 //        LOGI("nb_cpu_s: %d", nb_cpu_s);
-        av_stream = fmt_ctx->streams[stream_id];
+        avStream_ = fmtCtx->streams[streamId_];
         LOGI("Video -pix_fmt %s -video_size %d x %d",
-             av_get_pix_fmt_name(av_dec_ctx->pix_fmt), av_dec_ctx->width, av_dec_ctx->height);
+             av_get_pix_fmt_name(avDecCtx_->pix_fmt), avDecCtx_->width, avDecCtx_->height);
     } else {
-        stream_id = -1;
+        streamId_ = -1;
     }
-    if (av_stream) {
-        AVRational rational = av_stream->r_frame_rate;
+    if (avStream_) {
+        AVRational rational = avStream_->r_frame_rate;
         LOGI("rational: %d => %d", rational.den, rational.num);
-        sws_context = sws_getContext(
-                av_dec_ctx->width, av_dec_ctx->height, av_dec_ctx->pix_fmt,
-                av_dec_ctx->width, av_dec_ctx->height, AV_PIX_FMT_RGBA,
+        swsContext_ = sws_getContext(
+                avDecCtx_->width, avDecCtx_->height, avDecCtx_->pix_fmt,
+                avDecCtx_->width, avDecCtx_->height, AV_PIX_FMT_RGBA,
                 SWS_BILINEAR, nullptr, nullptr, nullptr);
-        if ((ret = av_image_alloc(dst_data, dst_line_size,
-                                  av_dec_ctx->width, av_dec_ctx->height,
+        if ((ret = av_image_alloc(dstData_, dstLineSize_,
+                                  avDecCtx_->width, avDecCtx_->height,
                                   AV_PIX_FMT_RGBA, 1)) < 0) {
             LOGE("Could not allocate destination image: %d", ret);
-            stream_id = -1;
+            streamId_ = -1;
         } else {
             LOGI("dst_data size: %d", ret);
-            pthread_create(&p_video_tid, 0, Video::videoProcess, this);
+            pthread_create(&pVideoTid_, nullptr, Video::VideoThreadProcess, this);
         }
     }
     return ret;
 }
 
-void Video::release() {
+Video::~Video() {
     LOGI("video pthread_join wait");
-    pthread_sleep.interrupt();
-    pthread_mutex_lock(&c_mutex);
-    thread_finish = true;
-    pthread_cond_signal(&c_cond);
-    pthread_mutex_unlock(&c_mutex);
-    if (p_video_tid) {
-        pthread_join(p_video_tid, nullptr);
+    pthreadSleep_.interrupt();
+    pthread_mutex_lock(&cMutex_);
+    threadFinish_ = true;
+    pthread_cond_signal(&cCond_);
+    pthread_mutex_unlock(&cMutex_);
+    if (pVideoTid_) {
+        pthread_join(pVideoTid_, nullptr);
     }
-    clearList();
+    ClearList();
     LOGI("video pthread_join done");
-    if (dst_data[0] != nullptr) {
-        av_freep(&dst_data[0]);
-        dst_data[0] = nullptr;
+    if (dstData_[0] != nullptr) {
+        av_freep(&dstData_[0]);
+        dstData_[0] = nullptr;
     }
-    if (sws_context != nullptr) {
-        sws_freeContext(sws_context);
-        sws_context = nullptr;
+    if (swsContext_ != nullptr) {
+        sws_freeContext(swsContext_);
+        swsContext_ = nullptr;
     }
-    if (av_dec_ctx) {
+    if (avDecCtx_) {
 //        avcodec_close(av_dec_ctx);
-        avcodec_free_context(&av_dec_ctx);
+        avcodec_free_context(&avDecCtx_);
     }
-    stream_id = 0;
-    av_stream = nullptr;
-    av_dec_ctx = nullptr;
+    streamId_ = 0;
+    avStream_ = nullptr;
+    avDecCtx_ = nullptr;
     LOGI("video Release");
 }
