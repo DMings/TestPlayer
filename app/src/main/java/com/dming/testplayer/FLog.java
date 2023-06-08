@@ -9,7 +9,7 @@ import android.util.Log;
 
 public class FLog {
 
-    private static String TAG = "DMFF";
+    private static String TAG = "DMPP";
 
     public static void i(String msg){
         if (BuildConfig.DEBUG) Log.i(TAG,msg);

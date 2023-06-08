@@ -19,7 +19,7 @@ public:
 
     float GetPktListTime();
 
-    float GetSpeed(float listTime);
+    void CalcPlaySpeed(float listTime);
 
     int OpenStream(AVFormatContext *fmtCtx);
 
@@ -48,6 +48,8 @@ private:
     float cacheTime_ = 200;
     uint reachMinTimeCount_ = 0;
     uint reachNormalTimeCount_ = 0;
+    float targetSpeed_ = 1.f;
+    float curSpeed_ = 1.f;
 
     static bool SampleRateValid(int sampleRate);
 

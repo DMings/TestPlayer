@@ -57,7 +57,6 @@ void *Audio::AudioThreadProcess(void *arg) {
     auto audioData = static_cast<uint8_t *>(memalign(64, sampleRate * nbChannels * bytes));
     LOGI("AudioThreadProcess: run!!!");
     float lastPlaySpeed = 1.0f;
-    float playSpeed;
     while (!audio->threadFinish_) {
         do {
             audioPacket = nullptr;
@@ -113,12 +112,12 @@ void *Audio::AudioThreadProcess(void *arg) {
                     audio->cacheTime_ = pktListTime + speedUnprocessedSampleTime + (float) (1000.0 *
                                                                                             audio->playAudio_->SampleCount() /
                                                                                             audio->avDecCtx_->sample_rate);
-                    playSpeed = audio->GetSpeed(pktListTime + speedUnprocessedSampleTime);
-                    if (lastPlaySpeed != playSpeed) {
-                        audioSpeed->SetSpeed(playSpeed);
-                        lastPlaySpeed = playSpeed;
-                        LOGI("playSpeed: %f numSamples: %d pkt_list size: %ld pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
-                             playSpeed,
+                    audio->CalcPlaySpeed(pktListTime + speedUnprocessedSampleTime);
+                    if (lastPlaySpeed != audio->curSpeed_) {
+                        audioSpeed->SetSpeed(audio->curSpeed_);
+                        lastPlaySpeed = audio->curSpeed_;
+                        LOGI("curSpeed_: %f targetSpeed_: %f numSamples: %d pkt_list size: %ld pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
+                             audio->curSpeed_, audio->targetSpeed_,
                              frame->nb_samples,
                              audio->pktList_.size(), pktListTime, pktListSize,
                              speedUnprocessedSampleTime);
@@ -188,7 +187,7 @@ float Audio::GetPktListTime() {
     }
 }
 
-float Audio::GetSpeed(float listTime) {
+void Audio::CalcPlaySpeed(float listTime) {
     float maxTime = (float) cacheMaxTime_ + 30;
     float minTime = std::max((float) cacheMaxTime_ / 2.5f, 146.f);
     minTime = std::min(minTime, 500.f);
@@ -196,18 +195,18 @@ float Audio::GetSpeed(float listTime) {
     if (listTime > maxTime) {
         float t = listTime - maxTime;
         float v = t / maxTime;
-        v = std::min(v, 3.f);
-        v *= 0.5f;
+        v = std::min(v, 2.f);
         speed *= (1.f + v);
     } else if (listTime < minTime) {
         float v = listTime / minTime;
-        v = 1.f - (1.f - v) * 0.6f;
-        v = std::max(v, 0.3f);
+        v = 1.f - (1.f - v);
+        v = std::max(v, 0.5f);
         speed *= v;
     }
+    int speedMaxCount = 3;
     speedList_.push_back(speed);
     for (;;) {
-        if (speedList_.size() > 2) {
+        if (speedList_.size() > speedMaxCount) {
             speedList_.pop_front();
         } else {
             break;
@@ -217,26 +216,40 @@ float Audio::GetSpeed(float listTime) {
     for (auto s: speedList_) {
         avgSpeed += s;
     }
-    avgSpeed = avgSpeed / (float) speedList_.size();
-    if (avgSpeed < 0.9f) {
-        reachMinTimeCount_++;
+    if (speedList_.size() == speedMaxCount) {
+        avgSpeed = avgSpeed / (float) speedList_.size();
+    } else {
+        avgSpeed = avgSpeed / (float) speedList_.size();
+        avgSpeed = std::min(avgSpeed, 1.1f);
+        avgSpeed = std::max(avgSpeed, 0.9f);
     }
-    if (avgSpeed > 0.98f && avgSpeed < 1.02f) {
+    targetSpeed_ = avgSpeed;
+    if (std::abs(targetSpeed_ - curSpeed_) > 0.0001) {
+        if (targetSpeed_ - curSpeed_ > 0) {
+            curSpeed_ += std::min(targetSpeed_ - curSpeed_, 0.05f);
+        } else {
+            curSpeed_ -= std::min(curSpeed_ - targetSpeed_, 0.08f);
+        }
+    }
+    if (minTime > listTime) {
+        reachMinTimeCount_++;
+        reachNormalTimeCount_ = 0;
+    }
+    if (listTime > minTime * 1.1f) {
         reachNormalTimeCount_++;
     }
     if (reachMinTimeCount_ >= 3) {
         reachMinTimeCount_ = 0;
-        cacheMaxTime_ *= 1.2f;
+        cacheMaxTime_ *= 1.1f;
         cacheMaxTime_ = std::min(cacheMaxTime_, 1500.f);
     }
-    if (reachNormalTimeCount_ >= 20) {
+    if (reachNormalTimeCount_ >= 10) {
         reachNormalTimeCount_ = 0;
         reachMinTimeCount_ = 0;
-        if (cacheMaxTime_ + 20.f > cacheSetTime_) {
-            cacheMaxTime_ -= (cacheMaxTime_ - cacheSetTime_) * 0.2f;
+        if (cacheMaxTime_ > cacheSetTime_) {
+            cacheMaxTime_ -= (cacheMaxTime_ - cacheSetTime_) * 0.05f;
         }
     }
-    return avgSpeed;
 }
 
 
@@ -279,9 +292,7 @@ Audio::~Audio() {
     pthread_cond_signal(&cCond_);
     pthread_mutex_unlock(&cMutex_);
     if (pAudioTid_) {
-        LOGI("audio pthread_join sss");
         pthread_join(pAudioTid_, nullptr);
-        LOGI("audio pthread_join eee");
     }
     ClearList();
     delete playAudio_;

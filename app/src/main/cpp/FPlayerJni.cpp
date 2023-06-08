@@ -92,6 +92,8 @@ int64_t ntpDeltaMs = 0;
 std::atomic_bool ntpSync(false);
 
 void SyncNTP(JNIEnv *env, jclass clazz, jlong ptr) {
+//    xtime_vnsec_t xtm_ltime2 = time_vnsec();
+//    LOGI("SyncNTP MS: %lld", xtm_ltime2 / 10000LL);
     if (ntpSync) {
         return;
     }
@@ -146,7 +148,7 @@ void SyncNTP(JNIEnv *env, jclass clazz, jlong ptr) {
                          xtm_local.ctx_second,
                          xtm_local.ctx_msec);
 
-                    ntpDeltaMs = ((x_int64_t) (xtm_ltime - xtm_vnsec)) / 10000LL;
+                    ntpDeltaMs = ((x_int64_t) (xtm_vnsec - xtm_ltime)) / 10000LL;
                     ntpSuccess = true;
                     LOGI("Deviation    : %ld ms", ntpDeltaMs);
                     break;
