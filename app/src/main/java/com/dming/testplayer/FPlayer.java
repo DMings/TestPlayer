@@ -100,6 +100,10 @@ public class FPlayer implements SurfaceHolder.Callback {
         return getNTPDelta(mPtr);
     }
 
+    public long getVideoNTPDelta() {
+        return getVideoNTPDelta(mPtr);
+    }
+
     public boolean hasNTP() {
         return hasNTP(mPtr);
     }
@@ -198,6 +202,8 @@ public class FPlayer implements SurfaceHolder.Callback {
     private static native void syncNTP(long ptr);
 
     private static native long getNTPDelta(long ptr);
+
+    private static native long getVideoNTPDelta(long ptr);
 
     private static native boolean hasNTP(long ptr);
 

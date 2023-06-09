@@ -21,6 +21,8 @@ public:
 
     uint64_t GetAvPacketSize();
 
+    int64_t GetVideoNTPDelta() const;
+
     int StreamIndex() const;
 
     AVStream *Stream() const;
@@ -40,6 +42,7 @@ private:
     std::atomic_bool threadFinish_ = false;
     int64_t lastPts_ = 0;
     PthreadSleep pthreadSleep_;
+    long videoNTPTimeMs_ = -999999;
 
     uint SynchronizeVideo(int64_t lastPts, int64_t pktDuration);
 

@@ -116,11 +116,11 @@ void *Audio::AudioThreadProcess(void *arg) {
                     if (lastPlaySpeed != audio->curSpeed_) {
                         audioSpeed->SetSpeed(audio->curSpeed_);
                         lastPlaySpeed = audio->curSpeed_;
-                        LOGI("curSpeed_: %f targetSpeed_: %f numSamples: %d pkt_list size: %ld pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
-                             audio->curSpeed_, audio->targetSpeed_,
-                             frame->nb_samples,
-                             audio->pktList_.size(), pktListTime, pktListSize,
-                             speedUnprocessedSampleTime);
+//                        LOGI("curSpeed_: %f targetSpeed_: %f numSamples: %d pkt_list size: %ld pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
+//                             audio->curSpeed_, audio->targetSpeed_,
+//                             frame->nb_samples,
+//                             audio->pktList_.size(), pktListTime, pktListSize,
+//                             speedUnprocessedSampleTime);
                     }
 
                     int sendSamples = frame->nb_samples;

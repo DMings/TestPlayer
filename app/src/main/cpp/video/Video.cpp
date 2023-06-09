@@ -4,6 +4,9 @@
 
 #include "Video.h"
 
+extern bool ntpSuccess;
+extern int64_t ntpDeltaMs;
+
 Video::Video(GLThread *glThread, AVClock *avClock) : avClock_(avClock),
                                                      pthreadSleep_() {
     this->glThread_ = glThread;
@@ -65,6 +68,10 @@ uint64_t Video::GetAvPacketSize() {
     return size;
 }
 
+int64_t Video::GetVideoNTPDelta() const {
+    return videoNTPTimeMs_;
+}
+
 void *Video::VideoThreadProcess(void *arg) {
     AVFrame *frame = av_frame_alloc();
     int ret;
@@ -119,6 +126,27 @@ void *Video::VideoThreadProcess(void *arg) {
                         LOGE("video legitimate decoding errors");
                         break;
                     }
+
+                    if (ntpSuccess) {
+                        AVFrameSideData *sideData = av_frame_get_side_data(frame,
+                                                                           AV_FRAME_DATA_SEI_UNREGISTERED);
+                        if (sideData != nullptr && sideData->size > 16) {
+                            char *cStr = reinterpret_cast<char *>(sideData->data);
+                            std::string timeStr(cStr, 16, sideData->size - 16);
+                            if (timeStr.substr(0, 4) == "NTP:") {
+                                std::string t = timeStr.substr(4, timeStr.size());
+                                try {
+                                    long timeMs = std::stol(t);
+                                    video->videoNTPTimeMs_ =
+                                            GetCurrentTimeMs() + ntpDeltaMs - timeMs;
+//                                    LOGI("timeMs: %ld videoNTPTimeMs_: %ld", timeMs,
+//                                         video->videoNTPTimeMs_);
+                                } catch (...) {
+                                }
+                            }
+                        }
+                    }
+
                     //  用 st 上的时基才对 av_stream
                     int64_t pts = av_rescale_q(frame->pts,
                                                video->avStream_->time_base,
@@ -137,7 +165,7 @@ void *Video::VideoThreadProcess(void *arg) {
                     video->avClock_->SetVideoClock(pts);
 
                     uint delay = video->SynchronizeVideo(video->lastPts_ / 1000,
-                                                        pkt_duration / 1000); // ms
+                                                         pkt_duration / 1000); // ms
 //                    LOGI("audio GetAudioPtsClock: %ld GetVideoPtsClock: %ld delay: %d real diff: %ld listSize: %ld",
 //                         video->avClock->GetAudioPtsClock() / 1000,
 //                         video->avClock->GetVideoPtsClock() / 1000,

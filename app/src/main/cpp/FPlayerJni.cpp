@@ -82,6 +82,11 @@ jlong GetAudioMaxCacheTime(JNIEnv *env, jclass type, jlong ptr) {
     return player->GetAudioMaxCacheTimeMs();
 }
 
+jlong GetVideoNTPDelta(JNIEnv *env, jclass clazz, jlong ptr) {
+    auto player = reinterpret_cast<FPlayer *>(ptr);
+    return player->GetVideoNTPDelta();
+}
+
 void DeleteInstance(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     delete player;
@@ -205,6 +210,7 @@ JNINativeMethod method[] = {
         {"getCurrentTime",       "(J)J",                         (void *) GetCurrentTime},
         {"syncNTP",              "(J)V",                         (void *) SyncNTP},
         {"getNTPDelta",          "(J)J",                         (void *) GetNTPDelta},
+        {"getVideoNTPDelta",     "(J)J",                         (void *) GetVideoNTPDelta},
         {"hasNTP",               "(J)Z",                         (void *) HasNTP},
         {"deleteInstance",       "(J)V",                         (void *) DeleteInstance},
 };

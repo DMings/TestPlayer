@@ -36,7 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean mIsShowPlayUI = true;
     private TextView mAudioCacheTimeTv;
     private TextView mNtpTimeTv;
-    private final SimpleDateFormat mSdf = new SimpleDateFormat("HH:mm:ss.SS", Locale.CHINA);
+    private final SimpleDateFormat mSdf = new SimpleDateFormat("HH:mm:ss.S", Locale.CHINA);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,7 +80,12 @@ public class MainActivity extends AppCompatActivity {
                     mAudioCacheTimeTv.setText("Audio Cache: " + timeMs + "Ms Max:" + maxTimeMs + "Ms");
                     if (mFPlayer.hasNTP()) {
                         long t = (System.currentTimeMillis() + mFPlayer.getNTPDelta());
-                        mNtpTimeTv.setText("NTP: " + mSdf.format(t));
+                        long videoNTPDelta = mFPlayer.getVideoNTPDelta();
+                        if (videoNTPDelta != -999999) {
+                            mNtpTimeTv.setText("NTP: " + mSdf.format(t) + "\n" + "NTP Pkt Delta: " + videoNTPDelta);
+                        } else {
+                            mNtpTimeTv.setText("NTP: " + mSdf.format(t));
+                        }
                     }
                 });
             }

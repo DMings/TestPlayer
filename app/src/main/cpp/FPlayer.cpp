@@ -253,6 +253,13 @@ int64_t FPlayer::GetCurTimeMs() {
     return avClock_->curTimeUs;
 }
 
+int64_t FPlayer::GetVideoNTPDelta() {
+    if (video_ && video_->StreamIndex() != -1) {
+        return (int) video_->GetVideoNTPDelta();
+    }
+    return -999999;
+}
+
 void FPlayer::Release() {
     running_ = false;
 }

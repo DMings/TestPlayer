@@ -44,6 +44,8 @@ public:
 
     int64_t GetCurTimeMs();
 
+    int64_t GetVideoNTPDelta();
+
     int GetAudioMaxCacheTimeMs();
 
     int GetAudioCacheTimeMs();

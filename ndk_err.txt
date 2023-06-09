@@ -1,1 +1,12 @@
 C:\Users\admin\AppData\Local\Android\Sdk\ndk\22.1.7171670\ndk-stack -sym E:\AndroidProject\TestPlayer\app\build\intermediates\cmake\debug\obj\arm64-v8a -dump log.txt
+
+//#include <iomanip>
+//#include <sstream>
+//                            LOGI("t: %s", t.c_str());
+//                            const char *newCtr = t.c_str();
+//                            std::stringstream ss;
+//                            for (int i = 0; i < t.size(); i++) {
+//                                ss << std::hex << std::setw(2) << std::setfill('0')
+//                                   << static_cast<int>(newCtr[i]);
+//                            }
+//                            LOGI("hex_str: %s", ss.str().c_str());
