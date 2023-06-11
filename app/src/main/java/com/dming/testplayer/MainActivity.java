@@ -51,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
         mCurTimeTv = findViewById(R.id.tv_cur_time);
         mControlLL = findViewById(R.id.ll_control);
         mHandler = new Handler(Looper.getMainLooper());
-        mUrlPath = "rtmp://43.138.249.153:1935/live/livestream";
+        mUrlPath = "rtmp://43.138.249.153:1935/live/push";
         mFPlayer = new FPlayer(mPlaySv);
         mFPlayer.setOnPlayListener(new FPlayer.OnPlayListener() {
             @Override
