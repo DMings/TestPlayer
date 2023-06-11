@@ -102,91 +102,84 @@ int64_t ntpDeltaMs = 0;
 std::atomic_bool ntpSync(false);
 
 void SyncNTP(JNIEnv *env, jclass clazz, jlong ptr) {
-//    xtime_vnsec_t xtm_ltime2 = time_vnsec();
-//    LOGI("SyncNTP MS: %lld", xtm_ltime2 / 10000LL);
     if (ntpSync) {
         return;
     }
     ntpSync = true;
+    ntpDeltaMs = 0;
     std::thread t([] {
-        x_int32_t xit_count = INT32_MAX;
-        x_int32_t xit_iter = 0;
+        int count = INT_MAX;
         xntp_cliptr_t xntp_this = X_NULL;
-
         xtime_vnsec_t xtm_vnsec = XTIME_INVALID_VNSEC;
         xtime_vnsec_t xtm_ltime = XTIME_INVALID_VNSEC;
         xtime_descr_t xtm_descr = {0};
         xtime_descr_t xtm_local = {0};
 
-        do {
+        for (int i = 0; i < count; ++i) {
             xntp_this = ntpcli_open();
             if (X_NULL == xntp_this) {
                 LOGI("ntpcli_open() return X_NULL, errno : %d", errno);
                 break;
             }
-
             ntpcli_config(xntp_this, "ntp.tencent.com", NTP_PORT);
+            xtm_vnsec = ntpcli_req_time(xntp_this, 3000);
+            if (XTMVNSEC_IS_VALID(xtm_vnsec)) {
+                xtm_ltime = time_vnsec();
+                xtm_descr = time_vtod(xtm_vnsec);
+                xtm_local = time_vtod(xtm_ltime);
 
-            for (xit_iter = 0; xit_iter < xit_count; ++xit_iter) {
-                xtm_vnsec = ntpcli_req_time(xntp_this, 3000);
-                if (XTMVNSEC_IS_VALID(xtm_vnsec)) {
-                    xtm_ltime = time_vnsec();
-                    xtm_descr = time_vtod(xtm_vnsec);
-                    xtm_local = time_vtod(xtm_ltime);
+                LOGI("[%d] %s:%d : ",
+                     i + 1,
+                     xntp_this->xszt_host,
+                     xntp_this->xut_port);
+                LOGI("NTP response : [ %04d-%02d-%02d %d %02d:%02d:%02d.%03d ]",
+                     xtm_descr.ctx_year,
+                     xtm_descr.ctx_month,
+                     xtm_descr.ctx_day,
+                     xtm_descr.ctx_week,
+                     xtm_descr.ctx_hour,
+                     xtm_descr.ctx_minute,
+                     xtm_descr.ctx_second,
+                     xtm_descr.ctx_msec);
 
-                    LOGI("[%d] %s:%d : ",
-                         xit_iter + 1,
-                         xntp_this->xszt_host,
-                         xntp_this->xut_port);
-                    LOGI("NTP response : [ %04d-%02d-%02d %d %02d:%02d:%02d.%03d ]",
-                         xtm_descr.ctx_year,
-                         xtm_descr.ctx_month,
-                         xtm_descr.ctx_day,
-                         xtm_descr.ctx_week,
-                         xtm_descr.ctx_hour,
-                         xtm_descr.ctx_minute,
-                         xtm_descr.ctx_second,
-                         xtm_descr.ctx_msec);
+                LOGI("Local time   : [ %04d-%02d-%02d %d %02d:%02d:%02d.%03d ]",
+                     xtm_local.ctx_year,
+                     xtm_local.ctx_month,
+                     xtm_local.ctx_day,
+                     xtm_local.ctx_week,
+                     xtm_local.ctx_hour,
+                     xtm_local.ctx_minute,
+                     xtm_local.ctx_second,
+                     xtm_local.ctx_msec);
 
-                    LOGI("Local time   : [ %04d-%02d-%02d %d %02d:%02d:%02d.%03d ]",
-                         xtm_local.ctx_year,
-                         xtm_local.ctx_month,
-                         xtm_local.ctx_day,
-                         xtm_local.ctx_week,
-                         xtm_local.ctx_hour,
-                         xtm_local.ctx_minute,
-                         xtm_local.ctx_second,
-                         xtm_local.ctx_msec);
-
-                    ntpDeltaMs = ((x_int64_t) (xtm_vnsec - xtm_ltime)) / 10000LL;
-                    ntpSuccess = true;
-                    LOGI("Deviation    : %ld ms", ntpDeltaMs);
-                    break;
-                } else {
-                    LOGI("[%d] %s:%d : errno = %d",
-                         xit_iter + 1,
-                         xntp_this->xszt_host,
-                         xntp_this->xut_port,
-                         errno);
-                }
-                if (!active) {
-                    break;
-                }
-                if (xit_count != 1) {
-                    usleep(1000000);
-                }
+                ntpDeltaMs = ((x_int64_t) (xtm_vnsec - xtm_ltime)) / 10000LL;
+                ntpSuccess = true;
+                LOGI("Deviation    : %ld ms", ntpDeltaMs);
+                break;
+            } else {
+                LOGI("[%d] %s:%d : errno = %d",
+                     i + 1,
+                     xntp_this->xszt_host,
+                     xntp_this->xut_port,
+                     errno);
             }
-            //======================================
-        } while (0);
-
-        if (X_NULL != xntp_this) {
-            ntpcli_close(xntp_this);
-            xntp_this = X_NULL;
+            if (X_NULL != xntp_this) {
+                ntpcli_close(xntp_this);
+                xntp_this = X_NULL;
+            }
+            if (!active) {
+                break;
+            }
+            if (1 != count) {
+                usleep(1000000);
+            }
         }
+        //======================================
         ntpSync = false;
     });
     t.detach();
 }
+
 
 jlong GetNTPDelta(JNIEnv *env, jclass clazz, jlong ptr) {
     return ntpDeltaMs;
