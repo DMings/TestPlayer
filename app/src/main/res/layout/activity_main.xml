@@ -90,21 +90,7 @@
         android:layout_marginLeft="20dp"
         android:layout_marginRight="20dp"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:textSize="13sp"
-        android:textAllCaps="false"
-        android:maxLines="1"
-        android:textColor="#fff"
-        android:text=""
-        />
-
-    <TextView
-        android:id="@+id/iiv_msg2"
-        android:layout_marginTop="80dp"
-        android:layout_marginLeft="20dp"
-        android:layout_marginRight="20dp"
-        android:layout_width="match_parent"
-        android:layout_height="80dp"
+        android:layout_height="100dp"
         android:textSize="13sp"
         android:textAllCaps="false"
         android:textColor="#fff"

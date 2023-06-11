@@ -81,13 +81,11 @@ int FPlayer::TimeoutInterruptCb(void *ctx) {
 }
 
 int FPlayer::Handle() {
-    int ret = -1;
     if (running_) {
         timeoutMS_ = GetCurrentTimeMs();
 //        __TSC__(av_read_frame);
-        ret = av_read_frame(fmtCtx_, pkt_);
 //        __TEC_LIMIT__(av_read_frame, 10);
-        if (ret == 0) {
+        if (av_read_frame(fmtCtx_, pkt_) == 0) {
             if (pkt_->stream_index == video_->StreamIndex() ||
                 pkt_->stream_index == audio_->StreamIndex()) {
 
@@ -212,11 +210,14 @@ int FPlayer::Handle() {
                 }
             }
             av_packet_unref(pkt_);
+            if (video_->GetPktListTime() > PKT_TIME_MS || audio_->GetPktListTime() > PKT_TIME_MS) {
+                return -2;
+            }
         } else {
-            ret = -1;
+            return -1;
         }
     }
-    return ret;
+    return 0;
 }
 
 void FPlayer::Close() {
@@ -250,7 +251,7 @@ int FPlayer::GetAudioMaxCacheTimeMs() {
 }
 
 int64_t FPlayer::GetCurTimeMs() {
-    return avClock_->curTimeUs;
+    return avClock_->GetAudioPtsClock() / 1000;
 }
 
 int64_t FPlayer::GetVideoNTPDelta() {
@@ -258,6 +259,13 @@ int64_t FPlayer::GetVideoNTPDelta() {
         return (int) video_->GetVideoNTPDelta();
     }
     return -999999;
+}
+
+int64_t FPlayer::GetVideoCacheTimeMs() {
+    if (video_ && video_->StreamIndex() != -1) {
+        return (int) video_->GetVideoCacheTime();
+    }
+    return 0;
 }
 
 void FPlayer::Release() {

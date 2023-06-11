@@ -18,7 +18,6 @@ public:
     Clock audioClk = {0};
 
 public:
-    int64_t curTimeUs = 0; // 当前时间
 
     AVClock();
 

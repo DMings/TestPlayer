@@ -9,7 +9,7 @@
 
 struct FPacket {
     AVPacket *avPacket;
-    int checkout_time;
+    int flush;
 };
 
 extern struct FPacket *alloc_packet();

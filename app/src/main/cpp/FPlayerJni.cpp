@@ -72,6 +72,11 @@ jlong GetCurrentTime(JNIEnv *env, jclass type, jlong ptr) {
     return player->GetCurTimeMs();
 }
 
+jlong GetVideoCacheTime(JNIEnv *env, jclass type, jlong ptr) {
+    auto player = reinterpret_cast<FPlayer *>(ptr);
+    return player->GetVideoCacheTimeMs();
+}
+
 jlong GetAudioCacheTime(JNIEnv *env, jclass type, jlong ptr) {
     auto player = reinterpret_cast<FPlayer *>(ptr);
     return player->GetAudioCacheTimeMs();
@@ -206,6 +211,7 @@ JNINativeMethod method[] = {
         {"surfaceChanged",       "(JLandroid/view/Surface;II)V", (void *) SurfaceChanged},
         {"surfaceDestroyed",     "(J)V",                         (void *) SurfaceDestroyed},
         {"getAudioCacheTime",    "(J)J",                         (void *) GetAudioCacheTime},
+        {"getVideoCacheTime",    "(J)J",                         (void *) GetVideoCacheTime},
         {"getAudioMaxCacheTime", "(J)J",                         (void *) GetAudioMaxCacheTime},
         {"getCurrentTime",       "(J)J",                         (void *) GetCurrentTime},
         {"syncNTP",              "(J)V",                         (void *) SyncNTP},

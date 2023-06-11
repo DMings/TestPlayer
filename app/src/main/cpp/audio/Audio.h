@@ -50,6 +50,7 @@ private:
     uint reachNormalTimeCount_ = 0;
     float targetSpeed_ = 1.f;
     float curSpeed_ = 1.f;
+    int64_t lastPts_ = 0;
 
     static bool SampleRateValid(int sampleRate);
 

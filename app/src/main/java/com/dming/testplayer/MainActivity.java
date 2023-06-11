@@ -1,5 +1,6 @@
 package com.dming.testplayer;
 
+import android.annotation.SuppressLint;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
 import android.os.Handler;
@@ -27,16 +28,15 @@ public class MainActivity extends AppCompatActivity {
     private TextView mTvSrc;
     private ProgressBar mWaitPb;
     private TextView mCurTimeTv;
-    private long mCurTime;
     private LinearLayout mControlLL;
     private FrameLayout mTitleLayout;
     private Handler mHandler;
     private String mUrlPath;
     private FPlayer mFPlayer;
     private boolean mIsShowPlayUI = true;
-    private TextView mAudioCacheTimeTv;
-    private TextView mNtpTimeTv;
-    private final SimpleDateFormat mSdf = new SimpleDateFormat("HH:mm:ss.S", Locale.CHINA);
+    private TextView mMsgInfoTv;
+    private final SimpleDateFormat mSdf = new SimpleDateFormat("HH:mm:ss.SSS", Locale.CHINA);
+    private final SimpleDateFormat mTimeSdf = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,15 +44,14 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         mTvSrc = findViewById(R.id.iiv_src_name);
-        mAudioCacheTimeTv = findViewById(R.id.iiv_msg);
-        mNtpTimeTv = findViewById(R.id.iiv_msg2);
+        mMsgInfoTv = findViewById(R.id.iiv_msg);
         mPlaySv = findViewById(R.id.sv_play);
         mTitleLayout = findViewById(R.id.fl_title);
         mWaitPb = findViewById(R.id.pb_wait);
         mCurTimeTv = findViewById(R.id.tv_cur_time);
         mControlLL = findViewById(R.id.ll_control);
         mHandler = new Handler(Looper.getMainLooper());
-        mUrlPath = "rtmp://43.138.249.153:1935/live/push";
+        mUrlPath = "rtmp://43.138.249.153:1935/live/livestream";
         mFPlayer = new FPlayer(mPlaySv);
         mFPlayer.setOnPlayListener(new FPlayer.OnPlayListener() {
             @Override
@@ -69,24 +68,27 @@ public class MainActivity extends AppCompatActivity {
                 mHandler.post(() -> {
                     mIsShowPlayUI = false;
                     mTvSrc.setText(mUrlPath);
-                    mCurTimeTv.setText(DUtils.secToTime(mCurTime));
+                    mCurTimeTv.setText("--:--");
                     mWaitPb.setVisibility(View.GONE);
                 });
             }
 
+            @SuppressLint("SetTextI18n")
             @Override
-            public void onAudioCacheTime(long timeMs, long maxTimeMs) {
+            public void onMsgInfoRequest() {
                 mHandler.post(() -> {
-                    mAudioCacheTimeTv.setText("Audio Cache: " + timeMs + "Ms Max:" + maxTimeMs + "Ms");
+                    String msg = "Audio Cache: " + mFPlayer.getAudioCacheTime() + "Ms Max:" + mFPlayer.getAudioMaxCacheTime() + "Ms" +
+                            "\nVideo Cache: " + mFPlayer.getVideoCacheTime() + " Ms";
                     if (mFPlayer.hasNTP()) {
                         long t = (System.currentTimeMillis() + mFPlayer.getNTPDelta());
+                        msg += "\nNTP: " + mSdf.format(t);
                         long videoNTPDelta = mFPlayer.getVideoNTPDelta();
                         if (videoNTPDelta != -999999) {
-                            mNtpTimeTv.setText("NTP: " + mSdf.format(t) + "\n" + "NTP Pkt Delta: " + videoNTPDelta);
-                        } else {
-                            mNtpTimeTv.setText("NTP: " + mSdf.format(t));
+                            msg += "\nNTP SendToRec Delta: " + videoNTPDelta;
                         }
                     }
+                    mMsgInfoTv.setText(msg);
+                    mCurTimeTv.setText(mTimeSdf.format(1685548800_000L + mFPlayer.getCurrentTime()));
                 });
             }
 
@@ -94,8 +96,7 @@ public class MainActivity extends AppCompatActivity {
             public void onEnd() {
                 mHandler.post(() -> {
                     mCurTimeTv.setText("--:--");
-                    mAudioCacheTimeTv.setText("");
-                    mNtpTimeTv.setText("");
+                    mMsgInfoTv.setText("");
                     mTvSrc.setText("已断开");
                     mWaitPb.setVisibility(View.GONE);
                 });

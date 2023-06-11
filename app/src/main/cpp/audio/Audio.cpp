@@ -78,7 +78,7 @@ void *Audio::AudioThreadProcess(void *arg) {
         } while (audioPacket == nullptr && !audio->threadFinish_);
         if (audioPacket != nullptr) {
             if (!audio->threadFinish_) {
-                if (audioPacket->checkout_time) {
+                if (audioPacket->flush) {
                     avcodec_flush_buffers(audio->avDecCtx_);
                 }
                 ret = avcodec_send_packet(audio->avDecCtx_, audioPacket->avPacket);
@@ -104,7 +104,6 @@ void *Audio::AudioThreadProcess(void *arg) {
                         LOGE("audio legitimate decoding errors");
                         break;
                     }
-                    size_t pktListSize = audio->pktList_.size();
                     float pktListTime = audio->GetPktListTime();
                     auto speedUnprocessedSampleTime = (float) (1000.0 *
                                                                audioSpeed->NumUnprocessedSamples() /
@@ -116,12 +115,17 @@ void *Audio::AudioThreadProcess(void *arg) {
                     if (lastPlaySpeed != audio->curSpeed_) {
                         audioSpeed->SetSpeed(audio->curSpeed_);
                         lastPlaySpeed = audio->curSpeed_;
-//                        LOGI("curSpeed_: %f targetSpeed_: %f numSamples: %d pkt_list size: %ld pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
+//                        LOGI("curSpeed_: %f targetSpeed_: %f numSamples: %d pktListTime: %f pktListSize: %ld speedSamplesTime: %f",
 //                             audio->curSpeed_, audio->targetSpeed_,
 //                             frame->nb_samples,
-//                             audio->pktList_.size(), pktListTime, pktListSize,
+//                             pktListTime,
+//                             audio->pktList_.size(),
 //                             speedUnprocessedSampleTime);
                     }
+                    int64_t pts = av_rescale_q(frame->pts,
+                                               audioPacket->avPacket->time_base,
+                                               AV_TIME_BASE_Q);
+                    audio->lastPts_ = pts;
 
                     int sendSamples = frame->nb_samples;
                     do {
@@ -141,11 +145,7 @@ void *Audio::AudioThreadProcess(void *arg) {
                         }
                     } while (true);
 
-                    int64_t pts = av_rescale_q(audioPacket->avPacket->pts,
-                                               audioPacket->avPacket->time_base,
-                                               AV_TIME_BASE_Q);
                     pts -= (int64_t) speedUnprocessedSampleTime * 1000;
-                    audio->avClock->curTimeUs = pts;
                     audio->avClock->SetAudioClock(pts);
 
                 }
@@ -173,17 +173,19 @@ float Audio::GetPktListTime() {
                                 av_rescale_q(pkt->avPacket->pts, pkt->avPacket->time_base,
                                              AV_TIME_BASE_Q));
     }
-    if (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
-        audioMaxTime - audioMinTime != 0) {
-        float t = (float) (audioMaxTime - audioMinTime) / 1000.f;
-        if (t < (float) pktList_.size() * pktDuration_ / 2.f) {
-            LOGE("pkt_list Size calc: %f  t=> %f", (float) pktList_.size() * pktDuration_, t);
-        }
+    if (audioMaxTime != INT64_MIN && lastPts_ > 0) {
         pthread_mutex_unlock(&cMutex_);
-        return t;
+        return (audioMaxTime - lastPts_) / 1000;
     } else {
-        pthread_mutex_unlock(&cMutex_);
-        return (float) pktList_.size() * pktDuration_;
+        if (audioMaxTime != INT64_MIN && audioMinTime != INT64_MAX &&
+            audioMaxTime - audioMinTime != 0) {
+            float t = (float) (audioMaxTime - audioMinTime) / 1000.f;
+            pthread_mutex_unlock(&cMutex_);
+            return t + pktDuration_;
+        } else {
+            pthread_mutex_unlock(&cMutex_);
+            return (float) pktList_.size() * pktDuration_;
+        }
     }
 }
 
@@ -196,7 +198,7 @@ void Audio::CalcPlaySpeed(float listTime) {
         float t = listTime - maxTime;
         float v = t / maxTime;
         v = std::min(v, 2.f);
-        speed *= (1.f + v);
+        speed *= (1.f + v * 0.68f);
     } else if (listTime < minTime) {
         float v = listTime / minTime;
         v = 1.f - (1.f - v);

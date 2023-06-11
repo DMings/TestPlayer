@@ -21,7 +21,7 @@ AVStream *Video::Stream() const {
     return avStream_;
 }
 
-uint Video::SynchronizeVideo(int64_t lastPts, int64_t pktDuration) { // ms
+int Video::SynchronizeVideo(int64_t lastPts, int64_t pktDuration) { // ms
     uint wanted_delay;
     int64_t diff_ms;
     int64_t duration;
@@ -44,7 +44,7 @@ uint Video::SynchronizeVideo(int64_t lastPts, int64_t pktDuration) { // ms
     }
 
     if (diff_ms < 0) {
-        wanted_delay = 0;
+        wanted_delay = diff_ms;
     } else {
         wanted_delay = std::min((int64_t) ((float) duration * 1.5f), diff_ms);
     }
@@ -70,6 +70,10 @@ uint64_t Video::GetAvPacketSize() {
 
 int64_t Video::GetVideoNTPDelta() const {
     return videoNTPTimeMs_;
+}
+
+int64_t Video::GetVideoCacheTime() const {
+    return videoCacheTime_;
 }
 
 void *Video::VideoThreadProcess(void *arg) {
@@ -99,9 +103,10 @@ void *Video::VideoThreadProcess(void *arg) {
             }
             pthread_mutex_unlock(&video->cMutex_);
         } while (videoPacket == nullptr && !video->threadFinish_);
+        video->videoCacheTime_ = video->GetPktListTime();
         if (videoPacket != nullptr) {
             if (!video->threadFinish_) {
-                if (videoPacket->checkout_time) {
+                if (videoPacket->flush) {
                     avcodec_flush_buffers(video->avDecCtx_);
                 }
                 ret = avcodec_send_packet(video->avDecCtx_, videoPacket->avPacket);
@@ -146,7 +151,6 @@ void *Video::VideoThreadProcess(void *arg) {
                             }
                         }
                     }
-
                     //  用 st 上的时基才对 av_stream
                     int64_t pts = av_rescale_q(frame->pts,
                                                video->avStream_->time_base,
@@ -155,17 +159,19 @@ void *Video::VideoThreadProcess(void *arg) {
                     int64_t pkt_duration = av_rescale_q(frame->duration,
                                                         video->avStream_->time_base,
                                                         AV_TIME_BASE_Q);// us
-                    video->glThread_->lockDraw();
-                    ret = sws_scale(video->swsContext_,
-                                    (const uint8_t *const *) frame->data, frame->linesize,
-                                    0, video->avDecCtx_->height,
-                                    video->dstData_, video->dstLineSize_); // lock
-                    video->glThread_->unlockDraw();
 
-                    video->avClock_->SetVideoClock(pts);
-
-                    uint delay = video->SynchronizeVideo(video->lastPts_ / 1000,
-                                                         pkt_duration / 1000); // ms
+                    int delay = video->SynchronizeVideo(video->lastPts_ / 1000,
+                                                        pkt_duration / 1000); // ms
+                    if (!(delay < -300 && video->pktList_.size() > 0)) {
+                        video->glThread_->lockDraw();
+                        ret = sws_scale(video->swsContext_,
+                                        (const uint8_t *const *) frame->data, frame->linesize,
+                                        0, video->avDecCtx_->height,
+                                        video->dstData_, video->dstLineSize_); // lock
+                        video->glThread_->unlockDraw();
+                        video->avClock_->SetVideoClock(pts);
+                        delay = video->SynchronizeVideo(video->lastPts_ / 1000,
+                                                        pkt_duration / 1000); // ms
 //                    LOGI("audio GetAudioPtsClock: %ld GetVideoPtsClock: %ld delay: %d real diff: %ld listSize: %ld",
 //                         video->avClock->GetAudioPtsClock() / 1000,
 //                         video->avClock->GetVideoPtsClock() / 1000,
@@ -173,9 +179,12 @@ void *Video::VideoThreadProcess(void *arg) {
 //                         (video->avClock->GetVideoPtsClock() - video->avClock->GetAudioPtsClock()) /
 //                         1000,
 //                         listSize);
-                    video->lastPts_ = pts;
-                    video->pthreadSleep_.sleep((uint) delay);
-                    video->glThread_->draw();
+                        video->lastPts_ = pts;
+                        if (delay > 0) {
+                            video->pthreadSleep_.sleep(delay);
+                        }
+                        video->glThread_->draw();
+                    }
                 }
             }
             av_packet_free(&videoPacket->avPacket);
@@ -189,6 +198,34 @@ void *Video::VideoThreadProcess(void *arg) {
     return nullptr;
 }
 
+int64_t Video::GetPktListTime() {
+    pthread_mutex_lock(&cMutex_);
+    int64_t videoMaxTime = INT64_MIN;
+    int64_t videoMinTime = INT64_MAX;
+    int64_t pktDuration = 50;
+    for (auto pkt: pktList_) {
+        videoMaxTime = std::max(videoMaxTime,
+                                av_rescale_q(pkt->avPacket->pts, pkt->avPacket->time_base,
+                                             AV_TIME_BASE_Q));
+        videoMinTime = std::min(videoMinTime,
+                                av_rescale_q(pkt->avPacket->pts, pkt->avPacket->time_base,
+                                             AV_TIME_BASE_Q));
+    }
+//    LOGI("videoMaxTime: %ld videoMinTime: %ld lastPts_: %ld",videoMaxTime,videoMinTime,lastPts_);
+    if (videoMaxTime != INT64_MIN && lastPts_ > 0) {
+        pthread_mutex_unlock(&cMutex_);
+        return (videoMaxTime - lastPts_) / 1000;
+    } else {
+        if (videoMaxTime != INT64_MIN && videoMinTime != INT64_MAX &&
+            videoMaxTime - videoMinTime != 0) {
+            pthread_mutex_unlock(&cMutex_);
+            return (int64_t) (videoMaxTime - videoMinTime) / 1000 + pktDuration;
+        } else {
+            pthread_mutex_unlock(&cMutex_);
+            return pktList_.size() * pktDuration;
+        }
+    }
+}
 
 int Video::OpenStream(AVFormatContext *fmtCtx) {
     int ret = OpenCodecContext(&streamId_, &avDecCtx_,

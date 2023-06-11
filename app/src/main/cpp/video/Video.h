@@ -23,6 +23,10 @@ public:
 
     int64_t GetVideoNTPDelta() const;
 
+    int64_t GetVideoCacheTime() const;
+
+    int64_t GetPktListTime();
+
     int StreamIndex() const;
 
     AVStream *Stream() const;
@@ -41,10 +45,11 @@ private:
     pthread_t pVideoTid_ = 0;
     std::atomic_bool threadFinish_ = false;
     int64_t lastPts_ = 0;
+    int64_t videoCacheTime_ = 0;
     PthreadSleep pthreadSleep_;
     long videoNTPTimeMs_ = -999999;
 
-    uint SynchronizeVideo(int64_t lastPts, int64_t pktDuration);
+    int SynchronizeVideo(int64_t lastPts, int64_t pktDuration);
 
     static void *VideoThreadProcess(void *arg);
 };

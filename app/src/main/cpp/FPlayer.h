@@ -29,6 +29,7 @@ private:
     int64_t aPts_ = -1;
 public:
     static constexpr int READ_TIMEOUT_MS = 3000;
+    static constexpr int PKT_TIME_MS = 3000;
 
     static int TimeoutInterruptCb(void *ctx);
 
@@ -45,6 +46,8 @@ public:
     int64_t GetCurTimeMs();
 
     int64_t GetVideoNTPDelta();
+
+    int64_t GetVideoCacheTimeMs();
 
     int GetAudioMaxCacheTimeMs();
 

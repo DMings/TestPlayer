@@ -42,7 +42,7 @@ public class FPlayer implements SurfaceHolder.Callback {
 
         void onConnect();
 
-        void onAudioCacheTime(long timeMs, long maxTimeMs);
+        void onMsgInfoRequest();
 
         void onEnd();
 
@@ -79,7 +79,7 @@ public class FPlayer implements SurfaceHolder.Callback {
         mPlayThread.quitSafely();
     }
 
-    public long getDurationTime() {
+    public long getCurrentTime() {
         return getCurrentTime(mPtr);
     }
 
@@ -87,10 +87,13 @@ public class FPlayer implements SurfaceHolder.Callback {
         return getAudioCacheTime(mPtr);
     }
 
+    public long getVideoCacheTime() {
+        return getVideoCacheTime(mPtr);
+    }
+
     public long getAudioMaxCacheTime() {
         return getAudioMaxCacheTime(mPtr);
     }
-
 
     public void syncNTP() {
         syncNTP(mPtr);
@@ -128,7 +131,7 @@ public class FPlayer implements SurfaceHolder.Callback {
                 while (FPlayer.handle(mPtr) >= 0 && !mFinish.get()) {
                     if (System.currentTimeMillis() - mTime > 95) {
                         if (mOnPlayListener != null) {
-                            mOnPlayListener.onAudioCacheTime(getAudioCacheTime(), getAudioMaxCacheTime());
+                            mOnPlayListener.onMsgInfoRequest();
                         }
                         mTime = System.currentTimeMillis();
                     }
@@ -196,6 +199,8 @@ public class FPlayer implements SurfaceHolder.Callback {
     private static native long getCurrentTime(long ptr);
 
     private static native long getAudioCacheTime(long ptr);
+
+    private static native long getVideoCacheTime(long ptr);
 
     private static native long getAudioMaxCacheTime(long ptr);
 
