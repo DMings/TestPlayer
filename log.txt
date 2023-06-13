@@ -1,27 +1,22 @@
-2023-06-07 16:39:41.110 27707-27707 DEBUG           pid-27707           A  *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  Build fingerprint: 'Xiaomi/thyme/thyme:13/TKQ1.220829.002/V14.0.4.0.TGACNXM:user/release-keys'
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  Revision: '0'
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  ABI: 'arm64'
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  Timestamp: 2023-06-07 16:39:39.943919023+0800
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  Process uptime: 279s
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  Cmdline: com.dming.testplayer
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  pid: 23455, tid: 27698, name: AudioTrack  >>> com.dming.testplayer <<<
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  uid: 10024
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  Cause: null pointer dereference
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x0  0000000000000000  x1  b400007843cc32c8  x2  b400007843c1b768  x3  0000000000000003
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x4  00000077cc6d0fa0  x5  0000000000000000  x6  0000000000000010  x7  ffff7f7f7f7f7f7f
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x8  b400007843cc32c0  x9  0000000000000000  x10 cb9817672c4e0c78  x11 0000000000000000
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x12 0000000000000000  x13 0000000000000017  x14 00000077cc6d2738  x15 0000000034155555
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x16 00000077d3448a50  x17 00000077d30406cc  x18 00000077c969a000  x19 00000000fffffc7d
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x20 b400007843c1b640  x21 b400007844334958  x22 0000000000006bc7  x23 0000000000005b9f
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x24 00000077cc6d2cb0  x25 00000077cc6d2cb0  x26 00000077cc6d2ff8  x27 00000000000fc000
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      x28 00000000000fe000  x29 00000077cc6d2b80
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A      lr  00000077d303fa20  sp  00000077cc6d2b60  pc  00000077d303fa20  pst 0000000060001000
-2023-06-07 16:39:41.111 27707-27707 DEBUG           pid-27707           A  backtrace:
-2023-06-07 16:39:41.112 27707-27707 DEBUG           pid-27707           A        #00 pc 0000000000153a20  /data/app/~~5X-7oqJBd7USObRYtQl3Ug==/com.dming.testplayer-9XDZwF-0z67ybJ8lYCxa8Q==/base.apk!libfplayer.so (AudioPlay::Restart()+136) (BuildId: 5563082186126917ce85a91d84c47331f43a23e9)
-2023-06-07 16:39:41.112 27707-27707 DEBUG           pid-27707           A        #01 pc 000000000015395c  /data/app/~~5X-7oqJBd7USObRYtQl3Ug==/com.dming.testplayer-9XDZwF-0z67ybJ8lYCxa8Q==/base.apk!libfplayer.so (AudioPlay::MyErrorCallback::onErrorAfterClose(oboe::AudioStream*, oboe::Result)+84) (BuildId: 5563082186126917ce85a91d84c47331f43a23e9)
-2023-06-07 16:39:41.112 27707-27707 DEBUG           pid-27707           A        #02 pc 000000000015e820  /data/app/~~5X-7oqJBd7USObRYtQl3Ug==/com.dming.testplayer-9XDZwF-0z67ybJ8lYCxa8Q==/base.apk!libfplayer.so (BuildId: 5563082186126917ce85a91d84c47331f43a23e9)
-2023-06-07 16:39:41.112 27707-27707 DEBUG           pid-27707           A        #03 pc 00000000001606fc  /data/app/~~5X-7oqJBd7USObRYtQl3Ug==/com.dming.testplayer-9XDZwF-0z67ybJ8lYCxa8Q==/base.apk!libfplayer.so (BuildId: 5563082186126917ce85a91d84c47331f43a23e9)
-2023-06-07 16:39:41.112 27707-27707 DEBUG           pid-27707           A        #04 pc 00000000000f5548  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+208) (BuildId: 2bb0d7188c0db2e8beecb24658ba9d71)
-2023-06-07 16:39:41.112 27707-27707 DEBUG           pid-27707           A        #05 pc 000000000008ef3c  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 2bb0d7188c0db2e8beecb24658ba9d71)
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  Build fingerprint: 'Xiaomi/thyme/thyme:13/TKQ1.220829.002/V14.0.4.0.TGACNXM:user/release-keys'
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  Revision: '0'
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  ABI: 'arm64'
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  Timestamp: 2023-06-13 15:07:55.205931161+0800
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  Process uptime: 2s
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  Cmdline: com.dming.testplayer
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  pid: 6971, tid: 7013, name: FPlayer  >>> com.dming.testplayer <<<
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  uid: 10024
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x0  0000000000000000  x1  0000000000001b65  x2  0000000000000006  x3  0000007af91face0
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x4  6272767261686b1f  x5  6272767261686b1f  x6  6272767261686b1f  x7  7f7f7f7f7f7f7f7f
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x8  00000000000000f0  x9  0000007c2aa83cb0  x10 0000000000000001  x11 0000007c2aaf8748
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x12 0101010101010101  x13 0a3433373a682e6c  x14 0000000000000000  x15 0000000000000060
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x16 0000007c2ab63a70  x17 0000007c2ab3c3d0  x18 0000007af5db4000  x19 0000000000001b3b
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x20 0000000000001b65  x21 00000000ffffffff  x22 b400007af02b6c30  x23 0000000000000000
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x24 0000000000000000  x25 0000000000010000  x26 0000000000000000  x27 0000000000000004
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      x28 0000000000000000  x29 0000007af91fad60
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A      lr  0000007c2aae96c8  sp  0000007af91facc0  pc  0000007c2aae96f4  pst 0000000000001000
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A  backtrace:
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A        #00 pc 000000000008d6f4  /apex/com.android.runtime/lib64/bionic/libc.so (abort+168) (BuildId: 2bb0d7188c0db2e8beecb24658ba9d71)
+2023-06-13 15:07:55.380  7034-7034  DEBUG           pid-7034            A        #01 pc 00000000002d8160  /data/app/~~kNBW_0GIaIhxnjZczcF-rQ==/com.dming.testplayer-2CNZjm47vZSSSgF9A4PCIQ==/base.apk!libfplayer.so (BuildId: 763b603684d8e226a01f34a9d5b008600f9a33fb)

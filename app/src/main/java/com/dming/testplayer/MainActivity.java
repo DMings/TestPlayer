@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
                         msg += "\nNTP: " + mSdf.format(t);
                         long videoNTPDelta = mFPlayer.getVideoNTPDelta();
                         if (videoNTPDelta != -999999) {
-                            msg += "\nNTP SendToRec Delta: " + videoNTPDelta;
+                            msg += "\nNTP Rec+Buffer Delay: " + videoNTPDelta;
                         }
                     }
                     mMsgInfoTv.setText(msg);

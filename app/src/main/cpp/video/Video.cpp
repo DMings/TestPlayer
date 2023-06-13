@@ -243,7 +243,7 @@ int Video::OpenStream(AVFormatContext *fmtCtx) {
     } else {
         streamId_ = -1;
     }
-    if (avStream_) {
+    if (avStream_ && avDecCtx_->width > 0 && avDecCtx_->height > 0) {
         AVRational rational = avStream_->r_frame_rate;
         LOGI("rational: %d => %d", rational.den, rational.num);
         swsContext_ = sws_getContext(
@@ -259,6 +259,9 @@ int Video::OpenStream(AVFormatContext *fmtCtx) {
             LOGI("dst_data size: %d", ret);
             pthread_create(&pVideoTid_, nullptr, Video::VideoThreadProcess, this);
         }
+    } else {
+        streamId_ = -1;
+        ret = -1;
     }
     return ret;
 }
